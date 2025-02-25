@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using BepInEx;
+using UnityEngine.Pool;
 
 namespace LobbyControl.API;
 
@@ -17,7 +19,15 @@ public struct ConnectionCheckpoint : IDisposable
 
     public static ConnectionCheckpoint RegisterCheckpoint(BepInPlugin source, string name)
     {
-        return new ConnectionCheckpoint(source, name);
+        var dictionaryKey = (source, name);
+
+        if (RegisteredCheckpoints.TryGetValue(dictionaryKey, out var checkpoint) && !checkpoint.IsDisposed)
+            return checkpoint;
+
+        checkpoint = new ConnectionCheckpoint(source, name);
+
+        RegisteredCheckpoints[dictionaryKey] = checkpoint;
+        return checkpoint;
     }
 
     public string Name { get; }
@@ -25,8 +35,13 @@ public struct ConnectionCheckpoint : IDisposable
 
     public Int64 Mask { get; private set; }
 
+    public bool IsDisposed => Mask == 0L;
+
     public bool Complete(ulong clientId)
     {
+        if (IsDisposed)
+            throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
+
         if (_connectingClientId is null && !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
@@ -45,6 +60,9 @@ public struct ConnectionCheckpoint : IDisposable
 
     public bool Reset(ulong clientId)
     {
+        if (IsDisposed)
+            throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
+
         if (_connectingClientId is null && !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
@@ -63,10 +81,18 @@ public struct ConnectionCheckpoint : IDisposable
 
     public void Dispose()
     {
+        if (IsDisposed)
+            throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
+
         _checkpointMask &= ~Mask;
         _currentCheckpoints &= ~Mask;
 
         Mask = 0;
+    }
+
+    public override string ToString()
+    {
+        return $"{{{Name} from {Plugin.Name}}}";
     }
 
     // internal stuff
@@ -106,6 +132,7 @@ public struct ConnectionCheckpoint : IDisposable
         return true;
     }
 
+    private static Dictionary<(BepInPlugin plugin, string name), ConnectionCheckpoint> RegisteredCheckpoints = [];
     private static Int64 _checkpointMask;
 
     private static Int64 _currentCheckpoints;
@@ -122,5 +149,26 @@ public struct ConnectionCheckpoint : IDisposable
     }
 
     internal static bool CurrentHasCompleted => _checkpointMask == _currentCheckpoints;
-    internal static Int64 CurrentMissing => ~_currentCheckpoints & _checkpointMask;
+    internal static Int64 CurrentMissingMask => ~_currentCheckpoints & _checkpointMask;
+
+    public static ConnectionCheckpoint[] CurrentMissingCheckpoints
+    {
+        get
+        {
+            var missing = CurrentMissingMask;
+            using (ListPool<ConnectionCheckpoint>.Get(out var list))
+            {
+                foreach (var checkpoint in RegisteredCheckpoints.Values)
+                {
+                    if (checkpoint.IsDisposed)
+                        continue;
+
+                    if ((checkpoint.Mask & missing) != 0)
+                        list.Add(checkpoint);
+                }
+
+                return list.ToArray();
+            }
+        }
+    }
 }

@@ -230,20 +230,6 @@ internal class JoinPatches
         }
     }
 
-    private static void OnConnectionCompleted(ulong clientId)
-    {
-        LobbyControl.Log.LogWarning($"{clientId} completed the connection");
-
-        //notify other players to reset the object variables
-        var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
-        var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
-        //skip the connecting client as he's guaranteed to have all the values correct
-        targets.Remove(clientId);
-        NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
-        //re-sort the radar map so all clients are aligned
-        NamedMessages.ReorderRadarClientRpc();
-    }
-
     private static void ClientConnectionCompleted2(
         NetworkBehaviour target, __RpcParams rpcParams)
     {
@@ -300,7 +286,7 @@ internal class JoinPatches
                     LobbyControl.Log.LogWarning(
                         $"Connection to {clientId} expired, Disconnecting!");
                     LobbyControl.Log.LogDebug(
-                        $"missing checkpoints for {clientId}: 0b{Convert.ToString(ConnectionCheckpoint.CurrentMissing, 2)}");
+                        $"missing checkpoints for {clientId}: [{string.Join(",", ConnectionCheckpoint.CurrentMissingCheckpoints)}]");
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
@@ -358,6 +344,20 @@ internal class JoinPatches
         {
             Monitor.Exit(Lock);
         }
+    }
+
+    private static void OnConnectionCompleted(ulong clientId)
+    {
+        LobbyControl.Log.LogWarning($"{clientId} completed the connection");
+
+        //notify other players to reset the object variables
+        var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
+        var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
+        //skip the connecting client as he's guaranteed to have all the values correct
+        targets.Remove(clientId);
+        NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
+        //re-sort the radar map so all clients are aligned
+        NamedMessages.ReorderRadarClientRpc();
     }
 
     [HarmonyFinalizer]
