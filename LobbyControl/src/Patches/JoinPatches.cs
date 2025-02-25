@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
-using System.Threading;
 using GameNetcodeStuff;
 using HarmonyLib;
 using LobbyControl.API;
@@ -22,6 +21,7 @@ internal class JoinPatches
     private static bool _checkpointsInitialized;
     private static ConnectionCheckpoint _syncAlreadyHeldObjectsCheckpoint;
     private static ConnectionCheckpoint _sendNewPlayerValuesCheckpoint;
+    private static ConnectionCheckpoint _syncAllPlayerLevelsCheckpoint;
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Awake))]
@@ -34,6 +34,9 @@ internal class JoinPatches
 
         _syncAlreadyHeldObjectsCheckpoint =
             ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAlreadyHeldObjects");
+
+        _syncAllPlayerLevelsCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAllPlayerLevels");
 
         if (__instance.disableSteam)
             return;
@@ -141,7 +144,6 @@ internal class JoinPatches
         ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
             response)> ConnectionQueue = new();
 
-    private static readonly object Lock = new();
     private static ulong _currentConnectingExpiration;
 
     internal static void Init()
@@ -152,7 +154,7 @@ internal class JoinPatches
         if (Utils.TryGetRpcID(methodInfo, out var id))
         {
             var harmonyTarget = AccessTools.Method(typeof(StartOfRound), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(ClientConnectionCompleted1));
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SyncAlreadyHeldObjectsCheckpoint));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -167,13 +169,30 @@ internal class JoinPatches
         if (Utils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(ClientConnectionCompleted2));
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SendNewPlayerValuesCheckpoint));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
         {
             LobbyControl.Log.LogFatal("Could not find RPC id for SendNewPlayerValuesServerRpc");
         }
+
+        methodInfo =
+            AccessTools.Method(typeof(HUDManager), nameof(HUDManager.SyncAllPlayerLevelsServerRpc),
+                [typeof(int), typeof(int)]);
+
+        if (Utils.TryGetRpcID(methodInfo, out id))
+        {
+            var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SyncAllPlayerLevelsCheckpoint));
+            LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
+        }
+        else
+        {
+            LobbyControl.Log.LogFatal("Could not find RPC id for SyncAllPlayerLevelsServerRpc");
+        }
+
+        //StartOfMatchLever
 
         var monoModTarget = AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.StartGame));
 
@@ -204,56 +223,54 @@ internal class JoinPatches
             return;
 
         LobbyControl.Log.LogInfo($"{clientId} disconnected");
-        lock (Lock)
-        {
-            if (ConnectionCheckpoint.ConnectingClientId != clientId)
-                return;
 
-            ConnectionCheckpoint.ConnectingClientId = null;
-            _currentConnectingExpiration = 0;
-        }
+        if (ConnectionCheckpoint.ConnectingClientId != clientId)
+            return;
+
+        ConnectionCheckpoint.ConnectingClientId = null;
+        _currentConnectingExpiration = 0;
     }
 
-    private static void ClientConnectionCompleted1(
+    private static void SyncAlreadyHeldObjectsCheckpoint(
         NetworkBehaviour target,
         __RpcParams rpcParams)
     {
-        var startOfRound = (StartOfRound)target;
-        if (!startOfRound.IsServer)
+        if (!target.IsServer)
             return;
 
         var clientId = rpcParams.Server.Receive.SenderClientId;
 
-        lock (Lock)
-        {
-            _syncAlreadyHeldObjectsCheckpoint.Complete(clientId);
-        }
+        _syncAlreadyHeldObjectsCheckpoint.Complete(clientId);
     }
 
-    private static void ClientConnectionCompleted2(
+    private static void SendNewPlayerValuesCheckpoint(
         NetworkBehaviour target, __RpcParams rpcParams)
     {
-        var playerControllerB = (PlayerControllerB)target;
-        if (!playerControllerB.IsServer)
+        if (!target.IsServer)
             return;
 
         var clientId = rpcParams.Server.Receive.SenderClientId;
 
-        lock (Lock)
-        {
-            _sendNewPlayerValuesCheckpoint.Complete(clientId);
-        }
+        _sendNewPlayerValuesCheckpoint.Complete(clientId);
+    }
+
+    private static void SyncAllPlayerLevelsCheckpoint(
+        NetworkBehaviour target, __RpcParams rpcParams)
+    {
+        if (!target.IsServer)
+            return;
+
+        var clientId = rpcParams.Server.Receive.SenderClientId;
+
+        _syncAllPlayerLevelsCheckpoint.Complete(clientId);
     }
 
 
-    [HarmonyFinalizer]
+    [HarmonyPostfix]
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.LateUpdate))]
     private static void ProcessConnectionQueue(StartOfRound __instance)
     {
         if (!__instance.IsServer)
-            return;
-
-        if (!Monitor.TryEnter(Lock))
             return;
 
         try
@@ -268,7 +285,16 @@ internal class JoinPatches
                 _currentConnectingExpiration = (ulong)(Environment.TickCount +
                                                        LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
 
-                OnConnectionCompleted(clientId);
+                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
+
+                //notify other players to reset the object variables
+                var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
+                var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
+                //skip the connecting client as he's guaranteed to have all the values correct
+                targets.Remove(clientId);
+                NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
+                //re-sort the radar map so all clients are aligned
+                NamedMessages.ReorderRadarClientRpc();
             }
 
             //if we are still waiting for a connection to complete
@@ -340,51 +366,33 @@ internal class JoinPatches
         {
             LobbyControl.Log.LogError(ex);
         }
-        finally
-        {
-            Monitor.Exit(Lock);
-        }
     }
 
-    private static void OnConnectionCompleted(ulong clientId)
-    {
-        LobbyControl.Log.LogWarning($"{clientId} completed the connection");
-
-        //notify other players to reset the object variables
-        var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
-        var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
-        //skip the connecting client as he's guaranteed to have all the values correct
-        targets.Remove(clientId);
-        NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
-        //re-sort the radar map so all clients are aligned
-        NamedMessages.ReorderRadarClientRpc();
-    }
 
     [HarmonyFinalizer]
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnLocalDisconnect))]
     private static void FlushConnectionQueue()
     {
-        lock (Lock)
+        ConnectionCheckpoint.ConnectingClientId = null;
+        _currentConnectingExpiration = 0UL;
+        if (ConnectionQueue.Count > 0)
         {
-            ConnectionCheckpoint.ConnectingClientId = null;
-            _currentConnectingExpiration = 0UL;
-            if (ConnectionQueue.Count > 0)
-            {
-                LobbyControl.Log.LogWarning(
-                    $"Disconnecting with {ConnectionQueue.Count} pending connection, Flushing!");
-            }
+            LobbyControl.Log.LogWarning(
+                $"Disconnecting with {ConnectionQueue.Count} pending connection, Flushing!");
+        }
 
-            while (ConnectionQueue.TryDequeue(out var entry))
-            {
-                entry.response.Reason = "Host has disconnected!";
-                entry.response.Approved = false;
-                entry.response.Pending = false;
-            }
+        while (ConnectionQueue.TryDequeue(out var entry))
+        {
+            entry.response.Reason = "Host has disconnected!";
+            entry.response.Approved = false;
+            entry.response.Pending = false;
         }
     }
 
     //--------------HANDLE SHIP LEVER----------------
 
+    // ReSharper disable once ConvertToConstant.Local
+    // ReSharper disable once FieldCanBeMadeReadOnly.Local
     private static bool _testValue = false;
 
     private static bool CanStartGame()
