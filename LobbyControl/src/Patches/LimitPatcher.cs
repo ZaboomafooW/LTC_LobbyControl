@@ -11,23 +11,24 @@ namespace LobbyControl.Patches
     [HarmonyPatch]
     internal class LimitPatcher
     {
-        
         [HarmonyTranspiler]
         [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.SyncShipUnlockablesClientRpc))]
         private static IEnumerable<CodeInstruction> PacketSizePatch(IEnumerable<CodeInstruction> instructions)
         {
             if (!LobbyControl.PluginConfig.SaveLimit.Enabled.Value)
                 return instructions;
-            
-            var methodInfo = typeof(NetworkBehaviour).GetMethod(nameof(NetworkBehaviour.__beginSendClientRpc), BindingFlags.Instance | BindingFlags.NonPublic);
-            var contructorInfo = typeof(FastBufferWriter).GetConstructor([typeof(int),typeof(Allocator),typeof(int)]);
+
+            var methodInfo = typeof(NetworkBehaviour).GetMethod(nameof(NetworkBehaviour.__beginSendClientRpc),
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var constructorInfo =
+                typeof(FastBufferWriter).GetConstructor([typeof(int), typeof(Allocator), typeof(int)]);
 
             var codes = instructions.ToList();
-            
+
             var matcher = new CodeMatcher(codes);
 
             matcher.MatchForward(true, new CodeMatch(OpCodes.Call, methodInfo));
-            
+
             if (matcher.IsInvalid)
             {
                 LobbyControl.Log.LogWarning("PacketSize patch failed 1!!");
@@ -42,14 +43,14 @@ namespace LobbyControl.Patches
                 new CodeInstruction(OpCodes.Ldc_I4, 1024),
                 new CodeInstruction(OpCodes.Ldc_I4_2),
                 new CodeInstruction(OpCodes.Ldc_I4, int.MaxValue),
-                new CodeInstruction(OpCodes.Newobj, contructorInfo)
-                );
-            
+                new CodeInstruction(OpCodes.Newobj, constructorInfo)
+            );
+
             LobbyControl.Log.LogDebug($"Patched PacketSize!");
 
             return matcher.Instructions();
         }
-        
+
         [HarmonyTranspiler]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.SyncShipUnlockablesServerRpc))]
@@ -61,9 +62,9 @@ namespace LobbyControl.Patches
             var methodInfo = typeof(GrabbableObject).GetMethod(nameof(GrabbableObject.GetItemDataToSave));
 
             var codes = instructions.ToList();
-            
+
             var matcher = new CodeMatcher(codes);
-            
+
             matcher.End();
             matcher.MatchBack(false,
                 new CodeMatch(OpCodes.Callvirt, methodInfo)
@@ -80,7 +81,7 @@ namespace LobbyControl.Patches
                 new CodeMatch(OpCodes.Ldloc_S),
                 new CodeMatch(OpCodes.Ldc_I4),
                 new CodeMatch(OpCodes.Ble)
-                );
+            );
 
             if (matcher.IsInvalid)
             {
@@ -94,9 +95,9 @@ namespace LobbyControl.Patches
             matcher.RemoveInstructions(6);
 
             matcher.AddLabels(labels);
-            
+
             LobbyControl.Log.LogDebug("Patched SyncShipUnlockablesServerRpc!!");
-            
+
             return matcher.Instructions();
         }
 
@@ -110,9 +111,9 @@ namespace LobbyControl.Patches
 
             var fieldInfo = typeof(StartOfRound).GetField(nameof(StartOfRound.maxShipItemCapacity));
             var methodInfo = typeof(StartOfRound).GetProperty(nameof(StartOfRound.Instance))!.GetMethod;
-            
+
             var codes = instructions.ToList();
-            
+
             var matcher = new CodeMatcher(codes);
 
             matcher.MatchForward(false,
@@ -121,20 +122,20 @@ namespace LobbyControl.Patches
                 new CodeMatch(OpCodes.Ldfld, fieldInfo),
                 new CodeMatch(OpCodes.Bgt)
             );
-            
+
             if (matcher.IsInvalid)
             {
                 LobbyControl.Log.LogWarning("SaveItemsInShip patch failed 1!!");
                 LobbyControl.Log.LogDebug(string.Join("\n", matcher.Instructions()));
                 return codes;
             }
-            
+
             var labels = matcher.Labels;
 
             matcher.RemoveInstructions(4);
 
             matcher.AddLabels(labels);
-            
+
             LobbyControl.Log.LogDebug("Patched SaveItemsInShip!!");
 
             return matcher.Instructions();
