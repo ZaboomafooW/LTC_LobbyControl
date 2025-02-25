@@ -110,20 +110,6 @@ namespace LobbyControl
                 var config = plugin.Config;
                 config.SaveOnConfigSet = false;
                 //Initialize Configs
-                //ItemSync
-                ItemSync.GhostItems = config.Bind("ItemSync", "ghost_items", true
-                    , "prevent the creation of non-grabbable items in case of inventory desync");
-                ItemSync.ForceDrop = config.Bind("ItemSync", "force_drop", true
-                    , "forcefully drop all items of the player causing the desync");
-                ItemSync.ShotGunReload = config.Bind("ItemSync", "shotgun_reload", true
-                    , "prevent the shotgun disappearing when reloading it");
-                ItemSync.SyncOnUse = config.Bind("ItemSync", "sync_on_use", false
-                    , "sync held object upon usage");
-                ItemSync.SyncOnInteract = config.Bind("ItemSync", "sync_on_interact", false
-                    , "sync held object upon interaction");
-                ItemSync.SyncIgnoreName = config.Bind("ItemSync", "sync_ignore_name",
-                    "Flashlight,Pro-flashlight,Laser pointer"
-                    , "do not attempt sync on items that are in the list (compatibility with FlashLight toggle, ecc)");
                 //SaveLimit
                 SaveLimit.Enabled = config.Bind("SaveLimit", "enabled", true
                     , "remove the limit to the amount of items that can be saved");
@@ -159,13 +145,6 @@ namespace LobbyControl
 
                 if (LethalConfigProxy.Enabled)
                 {
-                    //ItemSync
-                    LethalConfigProxy.AddConfig(ItemSync.GhostItems);
-                    LethalConfigProxy.AddConfig(ItemSync.ForceDrop);
-                    LethalConfigProxy.AddConfig(ItemSync.ShotGunReload);
-                    LethalConfigProxy.AddConfig(ItemSync.SyncOnUse);
-                    LethalConfigProxy.AddConfig(ItemSync.SyncOnInteract);
-                    LethalConfigProxy.AddConfig(ItemSync.SyncIgnoreName);
                     //SaveLimit
                     LethalConfigProxy.AddConfig(SaveLimit.Enabled);
                     //SteamLobby
@@ -202,16 +181,6 @@ namespace LobbyControl
             {
                 internal static ConfigEntry<bool> AutoLobby;
                 internal static ConfigEntry<bool> RadarFix;
-            }
-
-            internal static class ItemSync
-            {
-                internal static ConfigEntry<bool> GhostItems;
-                internal static ConfigEntry<bool> ForceDrop;
-                internal static ConfigEntry<bool> ShotGunReload;
-                internal static ConfigEntry<bool> SyncOnUse;
-                internal static ConfigEntry<bool> SyncOnInteract;
-                internal static ConfigEntry<string> SyncIgnoreName;
             }
 
             internal static class SaveLimit
