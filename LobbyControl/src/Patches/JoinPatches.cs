@@ -2,11 +2,12 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
 using GameNetcodeStuff;
 using HarmonyLib;
+using LobbyControl.API;
+using LobbyControl.Networking;
 using MonoMod.RuntimeDetour;
 using Unity.Netcode;
 using Object = UnityEngine.Object;
@@ -16,7 +17,32 @@ namespace LobbyControl.Patches;
 [HarmonyPatch]
 internal class JoinPatches
 {
-    internal static bool isLanding = false;
+    private static bool _allowNewConnection;
+
+    private static bool _checkpointsInitialized;
+    private static ConnectionCheckpoint _syncAlreadyHeldObjectsCheckpoint;
+    private static ConnectionCheckpoint _sendNewPlayerValuesCheckpoint;
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Awake))]
+    private static void OnStartup(GameNetworkManager __instance)
+    {
+        if (_checkpointsInitialized)
+            return;
+
+        _checkpointsInitialized = true;
+
+        _syncAlreadyHeldObjectsCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAlreadyHeldObjects");
+
+        if (__instance.disableSteam)
+            return;
+
+        _sendNewPlayerValuesCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SendNewPlayerValues");
+    }
+
+    //-----------------------ALLOW LATE JOINS----------------------------
 
     //Do not check for gameHasStarted.
     [HarmonyTranspiler]
@@ -76,7 +102,7 @@ internal class JoinPatches
             return null;
 
         //if we're already landing
-        if (isLanding)
+        if (!_allowNewConnection)
         {
             LobbyControl.Log.LogDebug("connection refused ( ship was landed ).");
             response.Reason = "Ship has already landed!";
@@ -104,64 +130,19 @@ internal class JoinPatches
             return null;
 
         response.Pending = true;
-        ConnectionQueue.Enqueue(response);
+        ConnectionQueue.Enqueue((request, response));
         LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{ConnectionQueue.Count}");
         return null;
     }
 
-    private static readonly ConcurrentQueue<NetworkManager.ConnectionApprovalResponse> ConnectionQueue = new();
+    //--------------------JOIN QUEUE LOGIC----------------------------
+
+    private static readonly
+        ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
+            response)> ConnectionQueue = new();
 
     private static readonly object Lock = new();
-    private static ulong? _currentConnectingPlayer;
     private static ulong _currentConnectingExpiration;
-    private static readonly bool[] CurrentConnectingPlayerConfirmations = [false, false];
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnClientConnect))]
-    private static void OnClientConnect(StartOfRound __instance, ulong clientId)
-    {
-        lock (Lock)
-        {
-            if (__instance.IsServer && LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
-            {
-                CurrentConnectingPlayerConfirmations[0] = false;
-                CurrentConnectingPlayerConfirmations[1] = false;
-                _currentConnectingPlayer = clientId;
-                _currentConnectingExpiration = (ulong)(Environment.TickCount +
-                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value);
-            }
-        }
-    }
-
-    [HarmonyFinalizer]
-    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnPlayerDC))]
-    private static void ResetForDc(StartOfRound __instance, int playerObjectNumber)
-    {
-        var playerObject = __instance.allPlayerObjects[playerObjectNumber];
-        var playerScript = __instance.allPlayerScripts[playerObjectNumber];
-        playerObject.transform.parent = __instance.playersContainer;
-        playerScript.justConnected = true;
-        playerScript.isCameraDisabled = true;
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Singleton_OnClientDisconnectCallback))]
-    private static void OnClientDisconnect(GameNetworkManager __instance, ulong clientId)
-    {
-        if (!__instance.isHostingGame)
-            return;
-
-        LobbyControl.Log.LogInfo($"{clientId} disconnected");
-        lock (Lock)
-        {
-            if (_currentConnectingPlayer != clientId)
-                return;
-
-            _currentConnectingPlayer = null;
-            _currentConnectingExpiration = 0;
-        }
-    }
-
 
     internal static void Init()
     {
@@ -174,6 +155,10 @@ internal class JoinPatches
             var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(ClientConnectionCompleted1));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
+        else
+        {
+            LobbyControl.Log.LogFatal("Could not find RPC id for SyncAlreadyHeldObjectsServerRpc");
+        }
 
 
         methodInfo =
@@ -185,14 +170,48 @@ internal class JoinPatches
             var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(ClientConnectionCompleted2));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
+        else
+        {
+            LobbyControl.Log.LogFatal("Could not find RPC id for SendNewPlayerValuesServerRpc");
+        }
 
         var monoModTarget = AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.StartGame));
 
         if (monoModTarget != null)
             LobbyControl.Hooks.Add(new Hook(monoModTarget, CheckValidStart, new HookConfig { Priority = 999 }));
         else
-            LobbyControl.Log.LogFatal(
-                $"Cannot apply patch to StartGame");
+            LobbyControl.Log.LogFatal("Cannot apply patch to StartGame");
+    }
+
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnClientConnect))]
+    private static void OnClientConnect(StartOfRound __instance, ulong clientId)
+    {
+        if (!__instance.IsServer || !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+            return;
+
+        if (ConnectionCheckpoint.ConnectingClientId != clientId)
+            LobbyControl.Log.LogError(
+                $"client {clientId} connected while {ConnectionCheckpoint.ConnectingClientId} was still being processed!");
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Singleton_OnClientDisconnectCallback))]
+    private static void OnClientDisconnect(GameNetworkManager __instance, ulong clientId)
+    {
+        if (!__instance.isHostingGame)
+            return;
+
+        LobbyControl.Log.LogInfo($"{clientId} disconnected");
+        lock (Lock)
+        {
+            if (ConnectionCheckpoint.ConnectingClientId != clientId)
+                return;
+
+            ConnectionCheckpoint.ConnectingClientId = null;
+            _currentConnectingExpiration = 0;
+        }
     }
 
     private static void ClientConnectionCompleted1(
@@ -207,23 +226,22 @@ internal class JoinPatches
 
         lock (Lock)
         {
-            if (_currentConnectingPlayer != clientId)
-                return;
-
-            CurrentConnectingPlayerConfirmations[0] = true;
-
-            if (CurrentConnectingPlayerConfirmations[1] || GameNetworkManager.Instance.disableSteam)
-            {
-                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
-                _currentConnectingPlayer = null;
-                _currentConnectingExpiration = (ulong)(Environment.TickCount +
-                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
-            }
-            else
-            {
-                LobbyControl.Log.LogWarning($"{clientId} is waiting to synchronize the name");
-            }
+            _syncAlreadyHeldObjectsCheckpoint.Complete(clientId);
         }
+    }
+
+    private static void OnConnectionCompleted(ulong clientId)
+    {
+        LobbyControl.Log.LogWarning($"{clientId} completed the connection");
+
+        //notify other players to reset the object variables
+        var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
+        var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
+        //skip the connecting client as he's guaranteed to have all the values correct
+        targets.Remove(clientId);
+        NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
+        //re-sort the radar map so all clients are aligned
+        NamedMessages.ReorderRadarClientRpc();
     }
 
     private static void ClientConnectionCompleted2(
@@ -237,22 +255,7 @@ internal class JoinPatches
 
         lock (Lock)
         {
-            if (_currentConnectingPlayer != clientId)
-                return;
-
-            CurrentConnectingPlayerConfirmations[1] = true;
-
-            if (CurrentConnectingPlayerConfirmations[0])
-            {
-                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
-                _currentConnectingPlayer = null;
-                _currentConnectingExpiration = (ulong)(Environment.TickCount +
-                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
-            }
-            else
-            {
-                LobbyControl.Log.LogWarning($"{clientId} is waiting to synchronize the held items");
-            }
+            _sendNewPlayerValuesCheckpoint.Complete(clientId);
         }
     }
 
@@ -269,18 +272,38 @@ internal class JoinPatches
 
         try
         {
-            if (_currentConnectingPlayer.HasValue)
+            //check if current connection reached all checkpoints!
+            if (ConnectionCheckpoint.CurrentHasCompleted && ConnectionCheckpoint.ConnectingClientId != null)
             {
+                var clientId = ConnectionCheckpoint.ConnectingClientId.Value;
+
+                LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
+                ConnectionCheckpoint.ConnectingClientId = null;
+                _currentConnectingExpiration = (ulong)(Environment.TickCount +
+                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
+
+                OnConnectionCompleted(clientId);
+            }
+
+            //if we are still waiting for a connection to complete
+            if (ConnectionCheckpoint.ConnectingClientId.HasValue)
+            {
+                var clientId = ConnectionCheckpoint.ConnectingClientId.Value;
+
+                //wait till the timeout expires
                 if ((ulong)Environment.TickCount < _currentConnectingExpiration)
                     return;
 
-                if (_currentConnectingPlayer.Value != 0L)
+                //if there was an actual client
+                if (clientId != 0L)
                 {
                     LobbyControl.Log.LogWarning(
-                        $"Connection to {_currentConnectingPlayer.Value} expired, Disconnecting!");
+                        $"Connection to {clientId} expired, Disconnecting!");
+                    LobbyControl.Log.LogDebug(
+                        $"missing checkpoints for {clientId}: 0b{Convert.ToString(ConnectionCheckpoint.CurrentMissing, 2)}");
                     try
                     {
-                        NetworkManager.Singleton.DisconnectClient(_currentConnectingPlayer.Value);
+                        NetworkManager.Singleton.DisconnectClient(clientId);
                     }
                     catch (Exception ex)
                     {
@@ -288,44 +311,44 @@ internal class JoinPatches
                     }
                 }
 
-                _currentConnectingPlayer = null;
+                //allow the connection of the next client
+                ConnectionCheckpoint.ConnectingClientId = null;
                 _currentConnectingExpiration = 0;
             }
-            else
+
+            //if we can let new connections in
+            if (_allowNewConnection)
             {
-                if (__instance.inShipPhase)
-                {
-                    if ((ulong)Environment.TickCount < _currentConnectingExpiration)
-                        return;
+                //wait until the delay between connections
+                if ((ulong)Environment.TickCount < _currentConnectingExpiration)
+                    return;
 
-                    if (!ConnectionQueue.TryDequeue(out var response))
-                        return;
+                if (!ConnectionQueue.TryDequeue(out var entry))
+                    return;
 
-                    LobbyControl.Log.LogWarning(
-                        $"Connection request Resumed! remaining: {ConnectionQueue.Count}");
-                    response.Pending = false;
-                    if (!response.Approved)
-                        return;
-                    CurrentConnectingPlayerConfirmations[0] = false;
-                    CurrentConnectingPlayerConfirmations[1] = false;
-                    _currentConnectingPlayer = 0L;
-                    _currentConnectingExpiration = (ulong)Environment.TickCount + 1000UL;
-                }
-                else
-                {
-                    if (ConnectionQueue.IsEmpty)
-                        return;
+                LobbyControl.Log.LogWarning(
+                    $"Connection request Resumed! remaining: {ConnectionQueue.Count}");
+                entry.response.Pending = false;
+                if (!entry.response.Approved)
+                    return;
 
-                    foreach (var approvalResponse in ConnectionQueue)
-                    {
-                        approvalResponse.Approved = false;
-                        approvalResponse.Reason = "ship has landed!";
-                        approvalResponse.Pending = false;
-                    }
-
-                    ConnectionQueue.Clear();
-                }
+                ConnectionCheckpoint.ConnectingClientId = entry.request.ClientNetworkId;
+                _currentConnectingExpiration = (ulong)(Environment.TickCount +
+                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value);
+                return;
             }
+
+            if (ConnectionQueue.IsEmpty)
+                return;
+
+            foreach (var (_, approvalResponse) in ConnectionQueue)
+            {
+                approvalResponse.Approved = false;
+                approvalResponse.Reason = "ship has landed!";
+                approvalResponse.Pending = false;
+            }
+
+            ConnectionQueue.Clear();
         }
         catch (Exception ex)
         {
@@ -343,9 +366,7 @@ internal class JoinPatches
     {
         lock (Lock)
         {
-            CurrentConnectingPlayerConfirmations[0] = false;
-            CurrentConnectingPlayerConfirmations[1] = false;
-            _currentConnectingPlayer = null;
+            ConnectionCheckpoint.ConnectingClientId = null;
             _currentConnectingExpiration = 0UL;
             if (ConnectionQueue.Count > 0)
             {
@@ -353,19 +374,22 @@ internal class JoinPatches
                     $"Disconnecting with {ConnectionQueue.Count} pending connection, Flushing!");
             }
 
-            while (ConnectionQueue.TryDequeue(out var response))
+            while (ConnectionQueue.TryDequeue(out var entry))
             {
-                response.Reason = "Host has disconnected!";
-                response.Approved = false;
-                response.Pending = false;
+                entry.response.Reason = "Host has disconnected!";
+                entry.response.Approved = false;
+                entry.response.Pending = false;
             }
         }
     }
 
+    //--------------HANDLE SHIP LEVER----------------
+
+    private static bool _testValue = false;
 
     private static bool CanStartGame()
     {
-        return !_currentConnectingPlayer.HasValue && ConnectionQueue.IsEmpty;
+        return !ConnectionCheckpoint.ConnectingClientId.HasValue && ConnectionQueue.IsEmpty && !_testValue;
     }
 
     private static void CheckValidStart(Action<StartOfRound> orig, StartOfRound @this)
@@ -378,7 +402,7 @@ internal class JoinPatches
 
         if (!CanStartGame())
         {
-            var count = ConnectionQueue.Count + (_currentConnectingPlayer.HasValue ? 1 : 0);
+            var count = ConnectionQueue.Count + (ConnectionCheckpoint.ConnectingClientId.HasValue ? 1 : 0);
 
             var leverScript = Object.FindAnyObjectByType<StartMatchLever>();
 
@@ -395,9 +419,16 @@ internal class JoinPatches
             return;
         }
 
-        isLanding = true;
+        _allowNewConnection = false;
 
         orig(@this);
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(StartMatchLever), nameof(StartMatchLever.CancelStartGame))]
+    private static void FixUnusableLever(StartMatchLever __instance)
+    {
+        __instance.triggerScript.interactable = true;
     }
 
     [HarmonyPostfix]
@@ -405,6 +436,6 @@ internal class JoinPatches
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Start))]
     private static void OnReadyToLand()
     {
-        isLanding = false;
+        _allowNewConnection = true;
     }
 }

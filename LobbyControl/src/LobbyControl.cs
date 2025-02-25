@@ -27,8 +27,9 @@ namespace LobbyControl
     {
         public const string GUID = "mattymatty.LobbyControl";
         public const string NAME = "LobbyControl";
-        public const string VERSION = "2.4.10";
         public const string VERSION = "2.5.0";
+
+        public static LobbyControl Instance;
 
         internal static ManualLogSource Log;
 
@@ -38,7 +39,6 @@ namespace LobbyControl
 
         public static bool CanSave = true;
         public static bool AutoSaveEnabled = true;
-        public static readonly List<Hook> Hooks = new List<Hook>();
 
         // ReSharper disable once CollectionNeverQueried.Global
         public static readonly List<Hook> Hooks = [];
@@ -57,6 +57,7 @@ namespace LobbyControl
         private void Awake()
         {
             Log = Logger;
+            Instance = this;
             try
             {
                 PluginInfo[] incompatibleMods = Chainloader.PluginInfos.Values
@@ -92,7 +93,6 @@ namespace LobbyControl
                     _harmony = new Harmony(GUID);
                     _harmony.PatchAll(Assembly.GetExecutingAssembly());
                     JoinPatches.Init();
-                    TransparentPlayerFix.Init();
 
                     Log.LogInfo(NAME + " v" + VERSION + " Loaded!");
                 }
@@ -127,9 +127,6 @@ namespace LobbyControl
                 //SaveLimit
                 SaveLimit.Enabled = config.Bind("SaveLimit", "enabled", true
                     , "remove the limit to the amount of items that can be saved");
-                //InvisiblePlayer
-                InvisiblePlayer.Enabled = config.Bind("InvisiblePlayer", "enabled", true
-                    , "attempts to fix late joining players appearing invisible to the rest of the lobby");
                 //SteamLobby
                 SteamLobby.AutoLobby = config.Bind("SteamLobby", "auto_lobby", false
                     , "automatically reopen the lobby as soon as you reach orbit");
@@ -149,6 +146,45 @@ namespace LobbyControl
                     , "After how much time discard a hanging connection");
                 JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 500
                     , "Delay between each successful connection");
+                JoinQueue.EnhancedDetection = config.Bind("JoinQueue", "enhanced_detection", false
+                    , "improve detection of connection status\nWARNING: requires all connecting clients to also have LobbyControl installed!");
+                //Networking
+                Networking.Enabled = config.Bind("Networking", "enabled", true
+                    , "handle extra actions requested by host");
+                Networking.SyncRadarNames = config.Bind("Networking", "sync_radar_names", false
+                    , "allow host to reorder radar names to align clients\nWARNING: all clients need to have the mod installed or desyncs might will happen");
+                Networking.ResetPlayerValues = config.Bind("Networking", "reset_player_values", true
+                    , "allow host to force clients to reset most fields of a playerObject ( fix for invisible players )");
+
+
+                if (LethalConfigProxy.Enabled)
+                {
+                    //ItemSync
+                    LethalConfigProxy.AddConfig(ItemSync.GhostItems);
+                    LethalConfigProxy.AddConfig(ItemSync.ForceDrop);
+                    LethalConfigProxy.AddConfig(ItemSync.ShotGunReload);
+                    LethalConfigProxy.AddConfig(ItemSync.SyncOnUse);
+                    LethalConfigProxy.AddConfig(ItemSync.SyncOnInteract);
+                    LethalConfigProxy.AddConfig(ItemSync.SyncIgnoreName);
+                    //SaveLimit
+                    LethalConfigProxy.AddConfig(SaveLimit.Enabled);
+                    //SteamLobby
+                    LethalConfigProxy.AddConfig(SteamLobby.AutoLobby);
+                    LethalConfigProxy.AddConfig(SteamLobby.RadarFix);
+                    //LogSpam
+                    LethalConfigProxy.AddConfig(LogSpam.Enabled);
+                    LethalConfigProxy.AddConfig(LogSpam.CalculatePolygonPath);
+                    LethalConfigProxy.AddConfig(LogSpam.AudioSpatializer);
+                    //JoinQueue
+                    LethalConfigProxy.AddConfig(JoinQueue.Enabled);
+                    LethalConfigProxy.AddConfig(JoinQueue.ConnectionTimeout);
+                    LethalConfigProxy.AddConfig(JoinQueue.ConnectionDelay);
+                    LethalConfigProxy.AddConfig(JoinQueue.EnhancedDetection);
+                    //Networking
+                    LethalConfigProxy.AddConfig(Networking.Enabled);
+                    LethalConfigProxy.AddConfig(Networking.SyncRadarNames);
+                    LethalConfigProxy.AddConfig(Networking.ResetPlayerValues);
+                }
 
                 //remove unused options
                 var orphanedEntriesProp = config.GetType()
@@ -183,11 +219,6 @@ namespace LobbyControl
                 internal static ConfigEntry<bool> Enabled;
             }
 
-            internal static class InvisiblePlayer
-            {
-                internal static ConfigEntry<bool> Enabled;
-            }
-
             internal static class LogSpam
             {
                 internal static ConfigEntry<bool> Enabled;
@@ -200,6 +231,14 @@ namespace LobbyControl
                 internal static ConfigEntry<bool> Enabled;
                 internal static ConfigEntry<int> ConnectionTimeout;
                 internal static ConfigEntry<int> ConnectionDelay;
+                internal static ConfigEntry<bool> EnhancedDetection;
+            }
+
+            internal static class Networking
+            {
+                internal static ConfigEntry<bool> Enabled;
+                internal static ConfigEntry<bool> SyncRadarNames;
+                internal static ConfigEntry<bool> ResetPlayerValues;
             }
         }
     }
