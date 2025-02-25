@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using BepInEx;
+using HarmonyLib;
 using LobbyControl.Patches;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
@@ -37,7 +38,7 @@ Extra:
 ";
 
         private const string DefaultTextLAN =
-@"- status        : prints the current lobby status
+            @"- status        : prints the current lobby status
 
 LAN:
 - open          : set the lobby to be discoverable
@@ -309,6 +310,7 @@ Extra:
                     node.displayText = "Server is limited to local connections\n\n";
                     return false;
                 }
+
                 manager.lobbyHostSettings.isLobbyPublic = true;
                 ES3.Save<bool>("HostSettings_Public", manager.lobbyHostSettings.isLobbyPublic, "LCGeneralSaveData");
             }
@@ -344,6 +346,7 @@ Extra:
                     node.displayText = "Server is limited to local connections\n\n";
                     return false;
                 }
+
                 manager.lobbyHostSettings.isLobbyPublic = false;
                 ES3.Save<bool>("HostSettings_Public", manager.lobbyHostSettings.isLobbyPublic, "LCGeneralSaveData");
             }
@@ -724,9 +727,12 @@ Extra:
                      baseUnlockable++)
                 {
                     var unlockable = startOfRound.unlockablesList.unlockables[baseUnlockable];
+                    if (unlockable.unlockableType == 0)
+                        continue;
+
                     if (unlockable.alreadyUnlocked)
                     {
-                        LobbyControl.Log.LogWarning($"{unlockable.unlockableName} starting");
+                        LobbyControl.Log.LogDebug($"{unlockable.unlockableName} starting");
                         if (!startOfRound.SpawnedShipUnlockables.ContainsKey(baseUnlockable))
                             startOfRound.SpawnUnlockable(baseUnlockable);
                         PlaceableShipObject shipObject = startOfRound.SpawnedShipUnlockables[baseUnlockable]
@@ -738,42 +744,62 @@ Extra:
                         if (shipObject is null)
                             continue;
 
-                        LobbyControl.Log.LogWarning($"{unlockable.unlockableName} continuing");
-                        var parentObject = shipObject.parentObject;
-                        if (parentObject != null)
+                        LobbyControl.Log.LogDebug($"{unlockable.unlockableName} continuing");
+                        if (shipObject.parentObjectSecondary)
                         {
-                            LobbyControl.Log.LogWarning($"{unlockable.unlockableName} parentObject");
-                            if (unlockable.inStorage)
-                                shipObject.parentObject.disableObject = true;
+                            // Invert Rotation
+                            // Original: finalRotation = (Euler(placementRotation) * Inverse(mainMeshRotation)) * initialRotation
 
-                            var offset = parentObject.positionOffset;
-                            var localOffset = startOfRound.elevatorTransform.TransformPoint(offset);
-                            var position = shipObject.mainMesh.transform.position;
-                            var placementPosition = localOffset -
-                                                    (shipObject.parentObject.transform.position - position) -
-                                                    (position - shipObject.placeObjectCollider.transform.position);
-                            unlockable.placedPosition = placementPosition;
-                            var rotation = Quaternion.Euler(parentObject.rotationOffset);
-                            var step1 = rotation * Quaternion.Inverse(parentObject.transform.rotation);
-                            var step2 = step1 * shipObject.mainMesh.transform.rotation;
-                            var placementRotation = step2.eulerAngles;
-                            unlockable.placedRotation = placementRotation;
+                            var finalRotation = shipObject.parentObjectSecondary.transform.rotation;
+                            var initialRotation = shipObject.parentObjectSecondary.transform.rotation;
+                            var mainMeshRotation = shipObject.mainMesh.transform.rotation;
+
+                            // First get the quaternion by multiplying by inverse of initialRotation
+                            var quaternion = finalRotation * Quaternion.Inverse(initialRotation);
+
+                            // Then solve for placementRotation
+                            unlockable.placedRotation = (quaternion * mainMeshRotation).eulerAngles;
+
+                            // Invert Position
+                            // Original: finalPosition = placementPosition + (parentPos - mainMeshPos) + (mainMeshPos - colliderPos)
+
+                            var finalPosition = shipObject.parentObjectSecondary.position;
+                            var offset1 = (shipObject.parentObjectSecondary.transform.position -
+                                           shipObject.mainMesh.transform.position);
+                            var offset2 = (shipObject.mainMesh.transform.position -
+                                           shipObject.placeObjectCollider.transform.position);
+
+                            unlockable.placedPosition = finalPosition - offset1 - offset2;
                         }
                         else
                         {
-                            LobbyControl.Log.LogWarning($"{unlockable.unlockableName} parentObjectSecondary");
-                            var parentObjectSecondary = shipObject.parentObjectSecondary;
-                            var parentPos = parentObjectSecondary.position;
-                            var transform = shipObject.mainMesh.transform;
-                            var position = transform.position;
-                            var placementPosition = parentPos -
-                                                    ((parentObjectSecondary.transform.position - position) +
-                                                     (position - shipObject.placeObjectCollider.transform.position));
-                            unlockable.placedPosition = placementPosition;
-                            var rotation = parentObjectSecondary.rotation;
-                            var step1 = rotation * Quaternion.Inverse(transform.rotation);
-                            var placementRotation = step1.eulerAngles;
-                            unlockable.placedRotation = placementRotation;
+                            // Calculate rotation
+                            // Original: finalRotation = (Euler(placementRotation) * Inverse(mainMeshRotation)) * initialRotation
+                            // We also have rotationOffset = finalRotation.eulerAngles
+
+                            var finalRotation = Quaternion.Euler(shipObject.parentObject.rotationOffset);
+                            var initialRotation = shipObject.parentObject.transform.rotation;
+                            var mainMeshRotation = shipObject.mainMesh.transform.rotation;
+
+                            // First get the quaternion
+                            var quaternion = finalRotation * Quaternion.Inverse(initialRotation);
+
+                            // Then solve for placementRotation
+                            unlockable.placedRotation = (quaternion * mainMeshRotation).eulerAngles;
+
+                            // Calculate position
+                            // Original: positionOffset = elevatorTransform.InverseTransformPoint(placementPosition + offset1 + offset2)
+                            // Therefore: placementPosition = elevatorTransform.TransformPoint(positionOffset) - offset1 - offset2
+
+                            var offset1 = (shipObject.parentObject.transform.position -
+                                           shipObject.mainMesh.transform.position);
+                            var offset2 = (shipObject.mainMesh.transform.position -
+                                           shipObject.placeObjectCollider.transform.position);
+
+                            // Transform the offset back to world space and solve for placementPosition
+                            unlockable.placedPosition =
+                                StartOfRound.Instance.elevatorTransform.TransformPoint(shipObject.parentObject
+                                    .positionOffset) - offset1 - offset2;
                         }
                     }
                 }
@@ -797,11 +823,15 @@ Extra:
                         var unlockable = startOfRound.unlockablesList.unlockables[baseUnlockable];
                         if (unlockable.alreadyUnlocked && !unlockable.inStorage)
                         {
-                            FastBufferWriter bufferWriter =
-                                startOfRound.__beginSendClientRpc(1076853239U, clientRpcParams, RpcDelivery.Reliable);
-                            BytePacker.WriteValueBitPacked(bufferWriter, baseUnlockable);
-                            startOfRound.__endSendClientRpc(ref bufferWriter, 1076853239U, clientRpcParams,
-                                RpcDelivery.Reliable);
+                            if (_returnUnlockableFromStorageServerRpcID.HasValue)
+                            {
+                                var rpcID = _returnUnlockableFromStorageServerRpcID.Value;
+                                FastBufferWriter bufferWriter =
+                                    startOfRound.__beginSendClientRpc(rpcID, clientRpcParams, RpcDelivery.Reliable);
+                                BytePacker.WriteValueBitPacked(bufferWriter, baseUnlockable);
+                                startOfRound.__endSendClientRpc(ref bufferWriter, rpcID, clientRpcParams,
+                                    RpcDelivery.Reliable);
+                            }
                         }
                     }
 
@@ -847,21 +877,47 @@ Extra:
             var timeUntilDeadline = (int)TimeOfDay.Instance.timeUntilDeadline;
             var controller = StartOfRound.Instance.localPlayerController;
 
-            FastBufferWriter bufferWriter =
-                startOfRound.__beginSendClientRpc(886676601U, clientRpcParams, RpcDelivery.Reliable);
-            BytePacker.WriteValueBitPacked(bufferWriter, controller.actualClientId);
-            BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.connectedPlayersAmount - 1);
-            bufferWriter.WriteValueSafe<bool>(true);
-            bufferWriter.WriteValueSafe<ulong>(ulongList.ToArray());
-            BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.ClientPlayerList[controller.actualClientId]);
-            BytePacker.WriteValueBitPacked(bufferWriter, groupCredits);
-            BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.currentLevelID);
-            BytePacker.WriteValueBitPacked(bufferWriter, profitQuota);
-            BytePacker.WriteValueBitPacked(bufferWriter, timeUntilDeadline);
-            BytePacker.WriteValueBitPacked(bufferWriter, quotaFulfilled);
-            BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.randomMapSeed);
-            bufferWriter.WriteValueSafe<bool>(in startOfRound.isChallengeFile);
-            startOfRound.__endSendClientRpc(ref bufferWriter, 886676601U, clientRpcParams, RpcDelivery.Reliable);
+            if (_onPlayerConnectedClientRpcID.HasValue)
+            {
+                var rpcID = _onPlayerConnectedClientRpcID.Value;
+                FastBufferWriter bufferWriter =
+                    startOfRound.__beginSendClientRpc(rpcID, clientRpcParams, RpcDelivery.Reliable);
+                BytePacker.WriteValueBitPacked(bufferWriter, controller.actualClientId);
+                BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.connectedPlayersAmount - 1);
+                bufferWriter.WriteValueSafe<bool>(true);
+                bufferWriter.WriteValueSafe<ulong>(ulongList.ToArray());
+                BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.ClientPlayerList[controller.actualClientId]);
+                BytePacker.WriteValueBitPacked(bufferWriter, groupCredits);
+                BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.currentLevelID);
+                BytePacker.WriteValueBitPacked(bufferWriter, profitQuota);
+                BytePacker.WriteValueBitPacked(bufferWriter, timeUntilDeadline);
+                BytePacker.WriteValueBitPacked(bufferWriter, quotaFulfilled);
+                BytePacker.WriteValueBitPacked(bufferWriter, startOfRound.randomMapSeed);
+                bufferWriter.WriteValueSafe<bool>(in startOfRound.isChallengeFile);
+                startOfRound.__endSendClientRpc(ref bufferWriter, rpcID, clientRpcParams, RpcDelivery.Reliable);
+            }
+        }
+
+        private static uint? _returnUnlockableFromStorageServerRpcID;
+        private static uint? _onPlayerConnectedClientRpcID;
+
+        internal static void Init()
+        {
+            var methodInfo =
+                AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.ReturnUnlockableFromStorageClientRpc));
+
+            if (Utils.TryGetRpcID(methodInfo, out var id))
+            {
+                _returnUnlockableFromStorageServerRpcID = id;
+            }
+
+            var methodInfo2 =
+                AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.OnPlayerConnectedClientRpc));
+
+            if (Utils.TryGetRpcID(methodInfo2, out var id2))
+            {
+                _onPlayerConnectedClientRpcID = id2;
+            }
         }
     }
 }

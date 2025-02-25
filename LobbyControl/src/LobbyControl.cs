@@ -40,15 +40,19 @@ namespace LobbyControl
         public static bool AutoSaveEnabled = true;
         public static readonly List<Hook> Hooks = new List<Hook>();
 
+        // ReSharper disable once CollectionNeverQueried.Global
+        public static readonly List<Hook> Hooks = [];
 
-        private static readonly string[] IncompatibleGUIDs = new string[]
-        {
+
+        private static readonly string[] IncompatibleGUIDs =
+        [
             "com.github.tinyhoot.ShipLobby",
             "twig.latecompany",
             "com.potatoepet.AdvancedCompany"
-        };
+        ];
 
-        internal static readonly List<PluginInfo> FoundIncompatibilities = new List<PluginInfo>();
+        // ReSharper disable once CollectionNeverQueried.Global
+        internal static readonly List<PluginInfo> FoundIncompatibilities = [];
 
         private void Awake()
         {
@@ -82,6 +86,8 @@ namespace LobbyControl
 
                     CommandManager.Initialize();
 
+                    LobbyCommand.Init();
+
                     Log.LogInfo("Patching Methods");
                     _harmony = new Harmony(GUID);
                     _harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -102,6 +108,7 @@ namespace LobbyControl
             internal static void Init(BaseUnityPlugin plugin)
             {
                 var config = plugin.Config;
+                config.SaveOnConfigSet = false;
                 //Initialize Configs
                 //ItemSync
                 ItemSync.GhostItems = config.Bind("ItemSync", "ghost_items", true
@@ -144,13 +151,15 @@ namespace LobbyControl
                     , "Delay between each successful connection");
 
                 //remove unused options
-                PropertyInfo orphanedEntriesProp = config.GetType()
+                var orphanedEntriesProp = config.GetType()
                     .GetProperty("OrphanedEntries", BindingFlags.NonPublic | BindingFlags.Instance);
 
                 var orphanedEntries = (Dictionary<ConfigDefinition, string>)orphanedEntriesProp!.GetValue(config, null);
 
                 orphanedEntries.Clear(); // Clear orphaned entries (Unbinded/Abandoned entries)
                 config.Save(); // Save the config file
+
+                config.SaveOnConfigSet = true;
             }
 
             internal static class SteamLobby
