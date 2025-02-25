@@ -1,3 +1,6 @@
+## v2.5.0
+- WIP
+
 ## v2.4.9
 - fix players being unable to join on rehost
 
