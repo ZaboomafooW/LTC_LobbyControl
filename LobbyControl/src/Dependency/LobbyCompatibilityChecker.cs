@@ -1,19 +1,21 @@
 using System;
 using System.Runtime.CompilerServices;
+using BepInEx.Bootstrap;
 using LobbyCompatibility.Enums;
 using LobbyCompatibility.Features;
 
-namespace LobbyControl.Dependency
+namespace LobbyControl.Dependency;
+
+public static class LobbyCompatibilityChecker
 {
-    public static class LobbyCompatibilityChecker
+    public static bool Enabled
     {
-        public static bool Enabled { get { return BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("BMX.LobbyCompatibility"); } }
-        
-        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-        public static void Init(string GUID, Version version, int Level, int strictness)
-        {
-            PluginHelper.RegisterPlugin(GUID, version, (CompatibilityLevel)Level, (VersionStrictness)strictness);
-        }
-        
+        get { return Chainloader.PluginInfos.ContainsKey("BMX.LobbyCompatibility"); }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+    public static void Init(string GUID, Version version, int Level, int strictness)
+    {
+        PluginHelper.RegisterPlugin(GUID, version, (CompatibilityLevel)Level, (VersionStrictness)strictness);
     }
 }

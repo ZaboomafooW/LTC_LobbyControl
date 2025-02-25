@@ -3,102 +3,101 @@ using HarmonyLib;
 using LobbyControl.TerminalCommands;
 using UnityEngine;
 
-namespace LobbyControl.Patches
+namespace LobbyControl.Patches;
+
+[HarmonyPatch]
+internal class TerminalPatch
 {
-    [HarmonyPatch]
-    internal class TerminalPatch
+    [HarmonyPatch(typeof(Terminal), nameof(Terminal.Start))]
+    [HarmonyPrefix]
+    static void StartPatch(ref TerminalNodesList ___terminalNodes)
     {
-        [HarmonyPatch(typeof(Terminal), nameof(Terminal.Start))]
-        [HarmonyPrefix]
-        static void StartPatch(ref TerminalNodesList ___terminalNodes)
+        OverrideTerminalNodes(___terminalNodes);
+    }
+
+    private static void OverrideTerminalNodes(TerminalNodesList terminalNodes)
+    {
+        OverrideHelpTerminalNode(terminalNodes);
+    }
+
+    private const string COMMAND = "\n\n>LOBBY [command] (lobby name)\ntype lobby help for more info.\n\n";
+
+    private static void OverrideHelpTerminalNode(TerminalNodesList terminalNodes)
+    {
+        TerminalNode node = null;
+        foreach (var keyword in terminalNodes.allKeywords)
         {
-            OverrideTerminalNodes(___terminalNodes);
+            if (keyword.word == "other")
+                node = keyword.specialKeywordResult;
         }
 
-        private static void OverrideTerminalNodes(TerminalNodesList terminalNodes)
+        if (node is null)
+            return;
+
+        var defaultMessage = node.displayText;
+        string message = defaultMessage.Replace(COMMAND, "").Trim();
+        if (GameNetworkManager.Instance.isHostingGame)
+            message += COMMAND;
+        else
+            message += "\n\n";
+        node.displayText = message;
+    }
+
+    [HarmonyPatch(typeof(Terminal), nameof(Terminal.ParsePlayerSentence))]
+    [HarmonyPrefix]
+    private static bool ParsePlayerSentencePatch(ref Terminal __instance, ref TerminalNode __result,
+        bool __runOriginal)
+    {
+        if (!__runOriginal)
+            return false;
+
+        var list = __instance.screenText.text
+            .Substring(__instance.screenText.text.Length - __instance.textAdded).Split(' ', 3).ToList();
+
+        while (list.Count < 3)
         {
-            OverrideHelpTerminalNode(terminalNodes);
+            list.Add("");
         }
 
-        private const string COMMAND = "\n\n>LOBBY [command] (lobby name)\ntype lobby help for more info.\n\n";
+        var array = list.ToArray();
 
-        private static void OverrideHelpTerminalNode(TerminalNodesList terminalNodes)
+        if (CommandManager.TryExecuteCommand(array, out TerminalNode terminalNode))
         {
-            TerminalNode node = null;
-            foreach (var keyword in terminalNodes.allKeywords)
+            if (terminalNode == null)
             {
-                if (keyword.word == "other")
-                    node = keyword.specialKeywordResult;
-            }
-
-            if (node is null)
-                return;
-
-            var defaultMessage = node.displayText;
-            string message = defaultMessage.Replace(COMMAND, "").Trim();
-            if (GameNetworkManager.Instance.isHostingGame)
-                message += COMMAND;
-            else
-                message += "\n\n";
-            node.displayText = message;
-        }
-
-        [HarmonyPatch(typeof(Terminal), nameof(Terminal.ParsePlayerSentence))]
-        [HarmonyPrefix]
-        private static bool ParsePlayerSentencePatch(ref Terminal __instance, ref TerminalNode __result,
-            bool __runOriginal)
-        {
-            if (!__runOriginal)
-                return false;
-
-            var list = __instance.screenText.text
-                .Substring(__instance.screenText.text.Length - __instance.textAdded).Split(' ', 3).ToList();
-
-            while (list.Count < 3)
-            {
-                list.Add("");
-            }
-
-            var array = list.ToArray();
-
-            if (CommandManager.TryExecuteCommand(array, out TerminalNode terminalNode))
-            {
-                if (terminalNode == null)
-                {
-                    __result = CreateTerminalNode("Error: terminalNode is null!\n\n");
-                    return false;
-                }
-
-                __result = terminalNode;
+                __result = CreateTerminalNode("Error: terminalNode is null!\n\n");
                 return false;
             }
 
-            return true;
+            __result = terminalNode;
+            return false;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(Terminal), nameof(Terminal.QuitTerminal))]
-        static void QuitTerminalPatch()
-        {
-            CommandManager.OnTerminalQuit();
-        }
+        return true;
+    }
 
-        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnLocalDisconnect))]
-        [HarmonyPrefix]
-        static void OnLocalDisconnectPatch()
-        {
-            CommandManager.OnLocalDisconnect();
-        }
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(Terminal), nameof(Terminal.QuitTerminal))]
+    static void QuitTerminalPatch()
+    {
+        CommandManager.OnTerminalQuit();
+    }
 
-        internal static TerminalNode CreateTerminalNode(string message, bool clearPreviousText = true)
-        {
-            TerminalNode terminalNode = ScriptableObject.CreateInstance<TerminalNode>();
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnLocalDisconnect))]
+    [HarmonyPrefix]
+    static void OnLocalDisconnectPatch()
+    {
+        CommandManager.OnLocalDisconnect();
+    }
 
-            terminalNode.displayText = message;
-            terminalNode.clearPreviousText = clearPreviousText;
-            terminalNode.maxCharactersToType = 50;
+    internal static TerminalNode CreateTerminalNode(string message, bool clearPreviousText = true)
+    {
+        TerminalNode terminalNode = ScriptableObject.CreateInstance<TerminalNode>();
 
-            return terminalNode;
-        }
+        terminalNode.displayText = message;
+        terminalNode.clearPreviousText = clearPreviousText;
+        terminalNode.maxCharactersToType = 50;
+
+        return terminalNode;
     }
 }
