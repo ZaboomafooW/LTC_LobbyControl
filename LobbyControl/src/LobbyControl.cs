@@ -92,7 +92,7 @@ namespace LobbyControl
                     Log.LogInfo("Patching Methods");
                     _harmony = new Harmony(GUID);
                     _harmony.PatchAll(Assembly.GetExecutingAssembly());
-                    JoinPatches.Init();
+                    JoinQueuePatches.Init();
 
                     Log.LogInfo(NAME + " v" + VERSION + " Loaded!");
                 }

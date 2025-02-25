@@ -8,8 +8,8 @@ namespace LobbyControl.Patches
     [HarmonyPatch]
     internal class LobbyPatcher
     {
-        private static readonly Dictionary<Lobby, LobbyType> Visibility = new Dictionary<Lobby, LobbyType>();
-        private static readonly Dictionary<Lobby, bool> Open = new Dictionary<Lobby, bool>();
+        private static readonly Dictionary<Lobby, LobbyType> Visibility = [];
+        private static readonly Dictionary<Lobby, bool> Open = [];
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Lobby), nameof(Lobby.SetJoinable))]

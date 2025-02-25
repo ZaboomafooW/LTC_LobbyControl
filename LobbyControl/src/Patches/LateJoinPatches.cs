@@ -4,8 +4,11 @@ using Object = UnityEngine.Object;
 namespace LobbyControl.Patches
 {
     [HarmonyPatch]
-    internal class NetworkPatcher
+    internal class LateJoinPatches
     {
+        ///
+        /// ALSO <see cref="JoinQueuePatches"/>
+        ///
         /// <summary>
         ///     Make the friend invite button work again once we open the lobby.
         /// </summary>

@@ -14,7 +14,7 @@ using Object = UnityEngine.Object;
 namespace LobbyControl.Patches;
 
 [HarmonyPatch]
-internal class JoinPatches
+internal class JoinQueuePatches
 {
     private static bool _allowNewConnection;
 
@@ -154,7 +154,8 @@ internal class JoinPatches
         if (Utils.TryGetRpcID(methodInfo, out var id))
         {
             var harmonyTarget = AccessTools.Method(typeof(StartOfRound), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SyncAlreadyHeldObjectsCheckpoint));
+            var harmonyFinalizer =
+                AccessTools.Method(typeof(JoinQueuePatches), nameof(SyncAlreadyHeldObjectsCheckpoint));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -169,7 +170,7 @@ internal class JoinPatches
         if (Utils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SendNewPlayerValuesCheckpoint));
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(SendNewPlayerValuesCheckpoint));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -184,7 +185,7 @@ internal class JoinPatches
         if (Utils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinPatches), nameof(SyncAllPlayerLevelsCheckpoint));
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(SyncAllPlayerLevelsCheckpoint));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else

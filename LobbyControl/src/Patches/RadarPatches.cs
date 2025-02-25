@@ -19,7 +19,7 @@ internal static class RadarPatches
         var codes = instructions.ToList();
 
         var fieldInfo = typeof(TransformAndName).GetField(nameof(TransformAndName.name));
-        var methodInfo = typeof(JoinPatches).GetMethod(nameof(SetNewName),
+        var methodInfo = typeof(JoinQueuePatches).GetMethod(nameof(SetNewName),
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Static);
 
         for (var i = 0; i < codes.Count; i++)
