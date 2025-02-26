@@ -193,6 +193,10 @@ internal class JoinQueuePatches
             LobbyControl.Log.LogFatal("Could not find RPC id for SyncAllPlayerLevelsServerRpc");
         }
 
+        //Connection completed callback
+
+        ConnectionEvents.OnConnectionCompletedServer += OnConnectionCompletedServer;
+
         //StartOfMatchLever
 
         var monoModTarget = AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.StartGame));
@@ -201,6 +205,21 @@ internal class JoinQueuePatches
             LobbyControl.Hooks.Add(new Hook(monoModTarget, CheckValidStart, new HookConfig { Priority = 999 }));
         else
             LobbyControl.Log.LogFatal("Cannot apply patch to StartGame");
+    }
+
+    private static void OnConnectionCompletedServer(ulong clientId)
+    {
+        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+            return;
+
+        //notify other players to reset the object variables
+        var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
+        var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
+        //skip the connecting client as he's guaranteed to have all the values correct
+        targets.Remove(clientId);
+        NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
+        //re-sort the radar map so all clients are aligned
+        NamedMessages.ReorderRadarClientRpc();
     }
 
 
@@ -214,6 +233,28 @@ internal class JoinQueuePatches
         if (ConnectionCheckpoint.ConnectingClientId != clientId)
             LobbyControl.Log.LogError(
                 $"client {clientId} connected while {ConnectionCheckpoint.ConnectingClientId} was still being processed!");
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnPlayerConnectedClientRpc))]
+    private static void OnClientConnect2(StartOfRound __instance, ulong clientId)
+    {
+        //run only if we're actually executing the Rpc code
+        var networkManager = __instance.NetworkManager;
+        if (networkManager == null || !networkManager.IsListening)
+            return;
+        if (__instance.__rpc_exec_stage != NetworkBehaviour.__RpcExecStage.Client ||
+            !networkManager.IsClient && !networkManager.IsHost)
+            return;
+
+        if (!__instance.IsServer)
+            return;
+
+        if (LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+            return;
+
+        //fallback event to when vanilla adds the playerIndex to StartOfRound.Instance.ClientPlayerList
+        ConnectionEvents.RaiseConnectionCompleteServerEvent(clientId);
     }
 
     [HarmonyPrefix]
@@ -288,14 +329,7 @@ internal class JoinQueuePatches
 
                 LobbyControl.Log.LogWarning($"{clientId} completed the connection");
 
-                //notify other players to reset the object variables
-                var playerIndex = StartOfRound.Instance.ClientPlayerList[clientId];
-                var targets = NetworkManager.Singleton.ConnectedClientsIds.ToList();
-                //skip the connecting client as he's guaranteed to have all the values correct
-                targets.Remove(clientId);
-                NamedMessages.ResetPlayerValuesClientRpc(playerIndex, targets.ToArray());
-                //re-sort the radar map so all clients are aligned
-                NamedMessages.ReorderRadarClientRpc();
+                ConnectionEvents.RaiseConnectionCompleteServerEvent(clientId);
             }
 
             //if we are still waiting for a connection to complete
@@ -341,8 +375,13 @@ internal class JoinQueuePatches
 
                 LobbyControl.Log.LogWarning(
                     $"Connection request Resumed! remaining: {ConnectionQueue.Count}");
+
                 entry.response.Pending = false;
                 if (!entry.response.Approved)
+                    return;
+
+                //if the queue has been disabled approve all the connections w/o waiting
+                if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
                     return;
 
                 ConnectionCheckpoint.ConnectingClientId = entry.request.ClientNetworkId;

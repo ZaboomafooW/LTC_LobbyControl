@@ -56,6 +56,8 @@ public class ConnectionCheckpoint : IDisposable
         _currentCheckpoints |= Mask;
         LobbyControl.Log.LogDebug($"client '{clientId}' completed checkpoint '{Name}' from '{Plugin.Name}'");
 
+        ConnectionEvents.RaiseConnectionCheckpointServerEvent(clientId, this);
+
         return true;
     }
 

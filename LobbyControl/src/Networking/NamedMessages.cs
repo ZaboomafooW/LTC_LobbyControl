@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -10,7 +11,7 @@ internal static class NamedMessages
     private static readonly string ReorderRadarClientRpcMessage = $"{BaseName}|ReorderRadarClientRpc";
     private static readonly string ResetPlayerValuesClientRpcMessage = $"{BaseName}|ResetPlayerValuesClientRpc";
 
-    internal static void RegisterMessages()
+    internal static void RegisterNamedMessages()
     {
         NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(ReorderRadarClientRpcMessage,
             OnReorderRadarClientRpc);
@@ -18,7 +19,7 @@ internal static class NamedMessages
             OnResetPlayerValuesClientRpc);
     }
 
-    internal static void ReorderRadarClientRpc(ulong[] targets = null)
+    internal static void ReorderRadarClientRpc(IReadOnlyList<ulong> targets = null)
     {
         if (!NetworkManager.Singleton.IsServer)
             return;
@@ -54,7 +55,7 @@ internal static class NamedMessages
         StartOfRound.Instance.mapScreen.SyncOrderOfRadarBoostersInList();
     }
 
-    internal static void ResetPlayerValuesClientRpc(int playerIndex, ulong[] targets = null)
+    internal static void ResetPlayerValuesClientRpc(int playerIndex, IReadOnlyList<ulong> targets = null)
     {
         if (!NetworkManager.Singleton.IsServer)
             return;

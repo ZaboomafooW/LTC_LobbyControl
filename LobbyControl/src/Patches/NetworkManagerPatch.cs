@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using LobbyControl.API;
 using LobbyControl.Networking;
 using Unity.Netcode;
 
@@ -11,7 +12,8 @@ internal class NetworkManagerPatch
     [HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.Initialize))]
     private static void AfterInitialize()
     {
-        LobbyControl.Log.LogInfo("Registering Custom Messages!");
-        NamedMessages.RegisterMessages();
+        LobbyControl.Log.LogInfo("Registering Named Messages!");
+        NamedMessages.RegisterNamedMessages();
+        ConnectionEvents.RegisterNamedMessages();
     }
 }
