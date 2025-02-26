@@ -5,7 +5,7 @@ using UnityEngine.Pool;
 
 namespace LobbyControl.API;
 
-public struct ConnectionCheckpoint : IDisposable
+public class ConnectionCheckpoint : IDisposable
 {
     public static ConnectionCheckpoint RegisterCheckpoint(BaseUnityPlugin source, string name)
     {
@@ -21,12 +21,13 @@ public struct ConnectionCheckpoint : IDisposable
     {
         var dictionaryKey = (source, name);
 
-        if (RegisteredCheckpoints.TryGetValue(dictionaryKey, out var checkpoint) && !checkpoint.IsDisposed)
+        if (RegisteredCheckpoints.TryGetValue(dictionaryKey, out var reference) &&
+            reference.TryGetTarget(out var checkpoint) && !checkpoint.IsDisposed)
             return checkpoint;
 
         checkpoint = new ConnectionCheckpoint(source, name);
 
-        RegisteredCheckpoints[dictionaryKey] = checkpoint;
+        RegisteredCheckpoints[dictionaryKey] = new WeakReference<ConnectionCheckpoint>(checkpoint);
         return checkpoint;
     }
 
@@ -90,6 +91,12 @@ public struct ConnectionCheckpoint : IDisposable
         Mask = 0;
     }
 
+    ~ConnectionCheckpoint()
+    {
+        if (!IsDisposed)
+            Dispose();
+    }
+
     public override string ToString()
     {
         return $"{{{Name} from {Plugin.Name}}}";
@@ -132,7 +139,9 @@ public struct ConnectionCheckpoint : IDisposable
         return true;
     }
 
-    private static Dictionary<(BepInPlugin plugin, string name), ConnectionCheckpoint> RegisteredCheckpoints = [];
+    private static Dictionary<(BepInPlugin plugin, string name), WeakReference<ConnectionCheckpoint>>
+        RegisteredCheckpoints = [];
+
     private static Int64 _checkpointMask;
 
     private static Int64 _currentCheckpoints;
@@ -158,8 +167,11 @@ public struct ConnectionCheckpoint : IDisposable
             var missing = CurrentMissingMask;
             using (ListPool<ConnectionCheckpoint>.Get(out var list))
             {
-                foreach (var checkpoint in RegisteredCheckpoints.Values)
+                foreach (var references in RegisteredCheckpoints.Values)
                 {
+                    if (!references.TryGetTarget(out var checkpoint))
+                        continue;
+
                     if (checkpoint.IsDisposed)
                         continue;
 

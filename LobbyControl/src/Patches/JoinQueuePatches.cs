@@ -313,7 +313,7 @@ internal class JoinQueuePatches
                     LobbyControl.Log.LogWarning(
                         $"Connection to {clientId} expired, Disconnecting!");
                     LobbyControl.Log.LogDebug(
-                        $"missing checkpoints for {clientId}: [{string.Join(",", ConnectionCheckpoint.CurrentMissingCheckpoints)}]");
+                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionCheckpoint.CurrentMissingCheckpoints)}]");
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
