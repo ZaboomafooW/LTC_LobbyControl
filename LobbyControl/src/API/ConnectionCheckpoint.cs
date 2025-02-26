@@ -38,7 +38,7 @@ public class ConnectionCheckpoint : IDisposable
 
     public bool IsDisposed => Mask == 0L;
 
-    public bool Complete(ulong clientId)
+    public bool Set(ulong clientId)
     {
         if (IsDisposed)
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
@@ -148,25 +148,24 @@ public class ConnectionCheckpoint : IDisposable
 
     private static Int64 _currentCheckpoints;
     private static ulong? _connectingClientId;
+    internal static bool HasCompletedAllCheckpoints => _checkpointMask == _currentCheckpoints;
+    internal static Int64 MissingCheckpointMask => ~_currentCheckpoints & _checkpointMask;
 
-    internal static ulong? ConnectingClientId
+    public static ulong? ConnectingClientId
     {
         get => _connectingClientId;
-        set
+        internal set
         {
             _currentCheckpoints = 0;
             _connectingClientId = value;
         }
     }
 
-    internal static bool CurrentHasCompleted => _checkpointMask == _currentCheckpoints;
-    internal static Int64 CurrentMissingMask => ~_currentCheckpoints & _checkpointMask;
-
-    public static ConnectionCheckpoint[] CurrentMissingCheckpoints
+    public static ConnectionCheckpoint[] MissingCheckpoints
     {
         get
         {
-            var missing = CurrentMissingMask;
+            var missing = MissingCheckpointMask;
             using (ListPool<ConnectionCheckpoint>.Get(out var list))
             {
                 foreach (var references in RegisteredCheckpoints.Values)

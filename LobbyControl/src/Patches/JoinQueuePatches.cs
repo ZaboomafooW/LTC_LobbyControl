@@ -63,7 +63,7 @@ internal class JoinQueuePatches
             {
                 var next = code[index + 1];
                 var prec = code[index - 1];
-                if (next.Branches(out Label? dest))
+                if (next.Branches(out var dest))
                 {
                     code[index - 1] = new CodeInstruction(OpCodes.Nop)
                     {
@@ -155,7 +155,7 @@ internal class JoinQueuePatches
         {
             var harmonyTarget = AccessTools.Method(typeof(StartOfRound), $"__rpc_handler_{id}");
             var harmonyFinalizer =
-                AccessTools.Method(typeof(JoinQueuePatches), nameof(SyncAlreadyHeldObjectsCheckpoint));
+                AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSyncAlreadyHeldObjectsServerRpc));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -170,7 +170,7 @@ internal class JoinQueuePatches
         if (Utils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(SendNewPlayerValuesCheckpoint));
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSendNewPlayerValuesServerRpc));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -184,8 +184,8 @@ internal class JoinQueuePatches
 
         if (Utils.TryGetRpcID(methodInfo, out id))
         {
-            var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
-            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(SyncAllPlayerLevelsCheckpoint));
+            var harmonyTarget = AccessTools.Method(typeof(HUDManager), $"__rpc_handler_{id}");
+            var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSyncAllPlayerLevelsServerRpc));
             LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
@@ -273,38 +273,47 @@ internal class JoinQueuePatches
         _currentConnectingExpiration = 0;
     }
 
-    private static void SyncAlreadyHeldObjectsCheckpoint(
+    private static void OnSyncAlreadyHeldObjectsServerRpc(
         NetworkBehaviour target,
         __RpcParams rpcParams)
     {
         if (!target.IsServer)
             return;
 
+        if (ConnectionCheckpoint.ConnectingClientId is null)
+            return;
+
         var clientId = rpcParams.Server.Receive.SenderClientId;
 
-        _syncAlreadyHeldObjectsCheckpoint.Complete(clientId);
+        _syncAlreadyHeldObjectsCheckpoint.Set(clientId);
     }
 
-    private static void SendNewPlayerValuesCheckpoint(
+    private static void OnSendNewPlayerValuesServerRpc(
         NetworkBehaviour target, __RpcParams rpcParams)
     {
         if (!target.IsServer)
             return;
 
+        if (ConnectionCheckpoint.ConnectingClientId is null)
+            return;
+
         var clientId = rpcParams.Server.Receive.SenderClientId;
 
-        _sendNewPlayerValuesCheckpoint.Complete(clientId);
+        _sendNewPlayerValuesCheckpoint.Set(clientId);
     }
 
-    private static void SyncAllPlayerLevelsCheckpoint(
+    private static void OnSyncAllPlayerLevelsServerRpc(
         NetworkBehaviour target, __RpcParams rpcParams)
     {
         if (!target.IsServer)
             return;
 
+        if (ConnectionCheckpoint.ConnectingClientId is null)
+            return;
+
         var clientId = rpcParams.Server.Receive.SenderClientId;
 
-        _syncAllPlayerLevelsCheckpoint.Complete(clientId);
+        _syncAllPlayerLevelsCheckpoint.Set(clientId);
     }
 
 
@@ -318,7 +327,7 @@ internal class JoinQueuePatches
         try
         {
             //check if current connection reached all checkpoints!
-            if (ConnectionCheckpoint.CurrentHasCompleted && ConnectionCheckpoint.ConnectingClientId != null)
+            if (ConnectionCheckpoint.HasCompletedAllCheckpoints && ConnectionCheckpoint.ConnectingClientId != null)
             {
                 var clientId = ConnectionCheckpoint.ConnectingClientId.Value;
 
@@ -346,8 +355,8 @@ internal class JoinQueuePatches
                 {
                     LobbyControl.Log.LogWarning(
                         $"Connection to {clientId} expired, Disconnecting!");
-                    LobbyControl.Log.LogDebug(
-                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionCheckpoint.CurrentMissingCheckpoints)}]");
+                    LobbyControl.Log.LogWarning(
+                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionCheckpoint.MissingCheckpoints)}]");
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
