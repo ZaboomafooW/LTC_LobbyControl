@@ -1,3 +1,6 @@
+## v2.5.1
+- correctly use milliseconds instead of Ticks
+
 ## v2.5.0
 - Rewrite Transpliers to be more readable thanks to Zaggy
 - Removed old code that is not needed anymore:

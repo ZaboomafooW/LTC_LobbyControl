@@ -142,7 +142,7 @@ internal class JoinQueuePatches
         ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
             response)> ConnectionQueue = new();
 
-    private static ulong _currentConnectingExpiration;
+    private static long _currentConnectingExpiration;
 
     internal static void Init()
     {
@@ -271,6 +271,16 @@ internal class JoinQueuePatches
         _currentConnectingExpiration = 0;
     }
 
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Singleton_OnClientConnectedCallback))]
+    private static void OnClientConnect(GameNetworkManager __instance, ulong clientId)
+    {
+        if (!__instance.isHostingGame)
+            return;
+
+        LobbyControl.Log.LogInfo($"{clientId} connected");
+    }
+
     private static void OnSyncAlreadyHeldObjectsServerRpc(
         NetworkBehaviour target,
         __RpcParams rpcParams)
@@ -331,10 +341,15 @@ internal class JoinQueuePatches
 
                 LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
                 ConnectionEvents.ConnectingClientId = null;
-                _currentConnectingExpiration = (ulong)(Environment.TickCount +
-                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
 
-                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
+                //var now = Environment.TickCount;
+                var now = DateTime.Now.Ticks / 10000;
+                var remaining = _currentConnectingExpiration - now;
+
+                _currentConnectingExpiration = now +
+                                               LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value;
+
+                LobbyControl.Log.LogWarning($"{clientId} completed the connection with {remaining}ms before timeout");
 
                 ConnectionEvents.RaiseConnectionCompleteServerEvent(clientId);
             }
@@ -345,7 +360,7 @@ internal class JoinQueuePatches
                 var clientId = ConnectionEvents.ConnectingClientId.Value;
 
                 //wait till the timeout expires
-                if ((ulong)Environment.TickCount < _currentConnectingExpiration)
+                if (DateTime.Now.Ticks / 10000 < _currentConnectingExpiration)
                     return;
 
                 //if there was an actual client
@@ -353,8 +368,16 @@ internal class JoinQueuePatches
                 {
                     LobbyControl.Log.LogWarning(
                         $"Connection to {clientId} expired, Disconnecting!");
+
+                    var missing = ConnectionEvents.MissingCheckpoints;
+
                     LobbyControl.Log.LogWarning(
-                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionEvents.MissingCheckpoints)}]");
+                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
+
+                    if (LobbyControl.PluginConfig.JoinQueue.VisualPopup.Value)
+                        HUDManager.Instance.DisplayTip("Connection Timeout",
+                            $"Client {clientId} missed {missing.Length}\nCheckpoints before the timeout");
+
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
@@ -374,7 +397,7 @@ internal class JoinQueuePatches
             if (_allowNewConnection)
             {
                 //wait until the delay between connections
-                if ((ulong)Environment.TickCount < _currentConnectingExpiration)
+                if (DateTime.Now.Ticks / 10000 < _currentConnectingExpiration)
                     return;
 
                 if (!ConnectionQueue.TryDequeue(out var entry))
@@ -392,8 +415,8 @@ internal class JoinQueuePatches
                     return;
 
                 ConnectionEvents.ConnectingClientId = entry.request.ClientNetworkId;
-                _currentConnectingExpiration = (ulong)(Environment.TickCount +
-                                                       LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value);
+                _currentConnectingExpiration = DateTime.Now.Ticks / 10000 +
+                                               LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
                 return;
             }
 
@@ -421,7 +444,7 @@ internal class JoinQueuePatches
     private static void FlushConnectionQueue()
     {
         ConnectionEvents.ConnectingClientId = null;
-        _currentConnectingExpiration = 0UL;
+        _currentConnectingExpiration = 0;
         if (ConnectionQueue.Count > 0)
         {
             LobbyControl.Log.LogWarning(

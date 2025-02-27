@@ -126,12 +126,12 @@ internal class LobbyControl : BaseUnityPlugin
             //JoinQueue
             JoinQueue.Enabled = config.Bind("JoinQueue", "enabled", true
                 , "handle joining players as a queue instead of at the same time");
-            JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 3000
+            JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 20000
                 , "After how much time discard a hanging connection");
-            JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 500
+            JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
                 , "Delay between each successful connection");
-            JoinQueue.EnhancedDetection = config.Bind("JoinQueue", "enhanced_detection", false
-                , "improve detection of connection status\nWARNING: requires all connecting clients to also have LobbyControl installed!");
+            JoinQueue.VisualPopup = config.Bind("JoinQueue", "timeout_notification", true
+                , "show a popup when a client fails to join before the timeout");
             //Networking
             Networking.Enabled = config.Bind("Networking", "enabled", true
                 , "handle extra actions requested by host");
@@ -155,7 +155,7 @@ internal class LobbyControl : BaseUnityPlugin
                 LethalConfigProxy.AddConfig(JoinQueue.Enabled);
                 LethalConfigProxy.AddConfig(JoinQueue.ConnectionTimeout);
                 LethalConfigProxy.AddConfig(JoinQueue.ConnectionDelay);
-                LethalConfigProxy.AddConfig(JoinQueue.EnhancedDetection);
+                LethalConfigProxy.AddConfig(JoinQueue.VisualPopup);
                 //Networking
                 LethalConfigProxy.AddConfig(Networking.Enabled);
                 LethalConfigProxy.AddConfig(Networking.SyncRadarNames);
@@ -196,7 +196,7 @@ internal class LobbyControl : BaseUnityPlugin
             internal static ConfigEntry<bool> Enabled;
             internal static ConfigEntry<int> ConnectionTimeout;
             internal static ConfigEntry<int> ConnectionDelay;
-            internal static ConfigEntry<bool> EnhancedDetection;
+            internal static ConfigEntry<bool> VisualPopup;
         }
 
         internal static class Networking
