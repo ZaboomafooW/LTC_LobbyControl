@@ -15,7 +15,7 @@ some of the features that are not about hosting have been moved to [Matty's Fixe
 
 Patches:
 --------
-- ### Steam Lobby ( all controls from terminal ):
+- ### Steam Lobby & Late Join ( all controls from terminal ):
   - allow to **re-open** the lobby while the Ship is **in Orbit** ( Late Joining )
   - **change the visibility** of the lobby  
   (public, Invite-Only, Friends-Only)
@@ -32,20 +32,23 @@ Patches:
   ( vanilla = 45 )
   - **removed** limit to amount of scrap that can be synchronized  
   ( vanilla = 250 , v55 = 500 )
+  - **removed** limit to amount of unlockables that can be synchronized  
+  ( vanilla = 175 )
 - ### InvisibleManFix
-  - **fix for late joining player being invisible if the previous owner of the body disconnected while dead**
-- ### ItemSyncFix
-  - prevent clients with **extra inventory** from generating unpickable items
-  - fix **shotguns disappearing** if client reloads while de-synced
-- ### JoinQueue:
+  - **fix for late joining player being invisible if the previous owner of the body disconnected while dead ( requires Client install )**
+- ### JoinQueue ( Fixes player in the wall / player without voice ):
   - process incoming connections as a queue to prevent two clients connecting at the same time
   - prevent landing if there are players in the queue
 - ### LogSpam:
   - fix the causes of some spammy error messages
     - stop **CalculatePolygonPath** when enemies die
 - ### Others:
-  - Prevent host crashes when an extra player tries to join when the lobby is already full but the last player has not finished joining 
-  - Fix wrong names in radarMap when a booster is enabled
+  - Prevent host crashes when an extra player tries to join when the lobby is already full but the last player has not finished joining
+
+Note:
+-----
+
+if needed there is a setting `SteamLobby.auto_lobby` that automatically opens the lobby each time the ship goes back to orbit
 
 Terminal Command:
 -----------------
@@ -76,13 +79,9 @@ Differences to [MoreItems](https://thunderstore.io/c/lethal-company/p/Drakorle/M
 MoreItems simply sets the max amount of items to the arbitrary value of 999.  
 This mod instead removes the limit entirely, additionally it also allows you to sync the scrap value of all those items
 
-Installation
-------------
-
-- Install [BepInEx](https://thunderstore.io/c/lethal-company/p/BepInEx/BepInExPack/)
-- Unzip this mod into your `Lethal Company/BepInEx/plugins` folder
-
-Or use the mod manager to handle the installing for you.
+Developers Joining API
+----------------------
+Documentation WIP
 
 Terminal Code by
 -----------

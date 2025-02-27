@@ -1,5 +1,12 @@
 ## v2.5.0
-- WIP
+- Rewrite Transpliers to be more readable thanks to Zaggy
+- Removed old code that is not needed anymore:
+  - removed RadarName ( superseded by Zaggy's TwoRadarMaps )
+  - removed ItemSync  ( superseded by AdditionalNetworking )
+- replaced TransparentPlayerFix with client-side version
+- added ConnectionCheckpoint API
+- modified JoinQueue system to use the ConnectionCheckpoint API
+- added ConnectionEvents API
 
 ## v2.4.9
 - fix players being unable to join on rehost
