@@ -2,11 +2,14 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Reflection.Emit;
 using GameNetcodeStuff;
 using HarmonyLib;
 using LobbyControl.API;
 using LobbyControl.Networking;
+using LobbyControl.Utils;
+using LobbyControl.Utils.IL;
 using MonoMod.RuntimeDetour;
 using Unity.Netcode;
 using Object = UnityEngine.Object;
@@ -53,40 +56,35 @@ internal class JoinQueuePatches
     private static IEnumerable<CodeInstruction> FixConnectionApprovalPrefix(
         IEnumerable<CodeInstruction> instructions)
     {
-        var gameStartedField = AccessTools.Field(typeof(GameNetworkManager), nameof(GameNetworkManager.gameHasStarted));
-        List<CodeInstruction> code = instructions.ToList();
+        var codes = instructions.ToList();
+        //   }
+        // - else if (GameNetworkManager.Instance.gameHasStarted)
+        // - {
+        // -     response.Reason = "Game has already started!";
+        // -     flag = false;
+        // - }
+        //   else if (GameNetworkManager.Instance.gameVersionNum.ToString() != strArray[0])
+        var injector = new ILInjector(codes)
+            .Find([
+                ILMatcher.Call(typeof(GameNetworkManager).GetProperty(nameof(GameNetworkManager.Instance))?.GetMethod),
+                ILMatcher.Ldfld(typeof(GameNetworkManager).GetField(nameof(GameNetworkManager.gameHasStarted),
+                    BindingFlags.Instance | BindingFlags.Public)),
+                ILMatcher.Opcode(OpCodes.Brfalse).CaptureLabelOperandAs(out var gameHasStartedLabel),
+            ]);
 
-        for (var index = 0; index < code.Count; index++)
+        if (!injector.IsValid)
         {
-            var curr = code[index];
-            if (curr.LoadsField(gameStartedField))
-            {
-                var next = code[index + 1];
-                var prec = code[index - 1];
-                if (next.Branches(out var dest))
-                {
-                    code[index - 1] = new CodeInstruction(OpCodes.Nop)
-                    {
-                        labels = prec.labels,
-                        blocks = prec.blocks
-                    };
-                    code[index] = new CodeInstruction(OpCodes.Nop)
-                    {
-                        labels = curr.labels,
-                        blocks = curr.blocks
-                    };
-                    code[index + 1] = new CodeInstruction(OpCodes.Br, dest)
-                    {
-                        labels = next.labels,
-                        blocks = next.blocks
-                    };
-                    LobbyControl.Log.LogDebug("Patched ConnectionApproval!!");
-                    break;
-                }
-            }
+            // print error
+            LobbyControl.Log.LogWarning("ConnectionApproval patch failed!!");
+            LobbyControl.Log.LogDebug(string.Join("\n", injector.ReleaseInstructions()));
+            return codes;
         }
 
-        return code;
+        return injector
+            .RemoveLastMatch()
+            .FindLabel(gameHasStartedLabel)
+            .RemoveLastMatch()
+            .ReleaseInstructions();
     }
 
     [HarmonyFinalizer]
@@ -151,7 +149,7 @@ internal class JoinQueuePatches
         var methodInfo =
             AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.SyncAlreadyHeldObjectsServerRpc));
 
-        if (Utils.TryGetRpcID(methodInfo, out var id))
+        if (RPCUtils.TryGetRpcID(methodInfo, out var id))
         {
             var harmonyTarget = AccessTools.Method(typeof(StartOfRound), $"__rpc_handler_{id}");
             var harmonyFinalizer =
@@ -167,7 +165,7 @@ internal class JoinQueuePatches
         methodInfo =
             AccessTools.Method(typeof(PlayerControllerB), nameof(PlayerControllerB.SendNewPlayerValuesServerRpc));
 
-        if (Utils.TryGetRpcID(methodInfo, out id))
+        if (RPCUtils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
             var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSendNewPlayerValuesServerRpc));
@@ -182,7 +180,7 @@ internal class JoinQueuePatches
             AccessTools.Method(typeof(HUDManager), nameof(HUDManager.SyncAllPlayerLevelsServerRpc),
                 [typeof(int), typeof(int)]);
 
-        if (Utils.TryGetRpcID(methodInfo, out id))
+        if (RPCUtils.TryGetRpcID(methodInfo, out id))
         {
             var harmonyTarget = AccessTools.Method(typeof(HUDManager), $"__rpc_handler_{id}");
             var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSyncAllPlayerLevelsServerRpc));

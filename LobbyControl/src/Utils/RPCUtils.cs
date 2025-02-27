@@ -6,14 +6,16 @@ using Mono.Cecil.Cil;
 using MonoMod.Utils;
 using Unity.Netcode;
 
-namespace LobbyControl;
+namespace LobbyControl.Utils;
 
-public static class Utils
+public static class RPCUtils
 {
     private static readonly MethodInfo BeginSendClientRpc =
         AccessTools.Method(typeof(NetworkBehaviour), nameof(NetworkBehaviour.__beginSendClientRpc));
+
     private static readonly MethodInfo BeginSendServerRpc =
         AccessTools.Method(typeof(NetworkBehaviour), nameof(NetworkBehaviour.__beginSendServerRpc));
+
     internal static bool TryGetRpcID(MethodInfo methodInfo, out uint rpcID)
     {
         var instructions = methodInfo.GetMethodPatcher().CopyOriginal().Definition.Body.Instructions;
@@ -28,7 +30,7 @@ public static class Utils
                 instructions[i].Operand is not MethodReference operand ||
                 !(operand.Is(BeginSendClientRpc) || operand.Is(BeginSendServerRpc)))
                 continue;
-            
+
             LobbyControl.Log.LogDebug($"Rpc Id found for {methodInfo.Name}: {rpcID}U");
             return true;
         }

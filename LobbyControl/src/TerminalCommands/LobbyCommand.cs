@@ -6,6 +6,7 @@ using System.Text;
 using BepInEx;
 using HarmonyLib;
 using LobbyControl.Patches;
+using LobbyControl.Utils;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -906,7 +907,7 @@ Extra:
         var methodInfo =
             AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.ReturnUnlockableFromStorageClientRpc));
 
-        if (Utils.TryGetRpcID(methodInfo, out var id))
+        if (RPCUtils.TryGetRpcID(methodInfo, out var id))
         {
             _returnUnlockableFromStorageServerRpcID = id;
         }
@@ -914,7 +915,7 @@ Extra:
         var methodInfo2 =
             AccessTools.Method(typeof(StartOfRound), nameof(StartOfRound.OnPlayerConnectedClientRpc));
 
-        if (Utils.TryGetRpcID(methodInfo2, out var id2))
+        if (RPCUtils.TryGetRpcID(methodInfo2, out var id2))
         {
             _onPlayerConnectedClientRpcID = id2;
         }
