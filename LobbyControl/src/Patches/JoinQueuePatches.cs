@@ -228,9 +228,9 @@ internal class JoinQueuePatches
         if (!__instance.IsServer || !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
             return;
 
-        if (ConnectionCheckpoint.ConnectingClientId != clientId)
+        if (ConnectionEvents.ConnectingClientId != clientId)
             LobbyControl.Log.LogError(
-                $"client {clientId} connected while {ConnectionCheckpoint.ConnectingClientId} was still being processed!");
+                $"client {clientId} connected while {ConnectionEvents.ConnectingClientId} was still being processed!");
     }
 
     [HarmonyPostfix]
@@ -264,10 +264,10 @@ internal class JoinQueuePatches
 
         LobbyControl.Log.LogInfo($"{clientId} disconnected");
 
-        if (ConnectionCheckpoint.ConnectingClientId != clientId)
+        if (ConnectionEvents.ConnectingClientId != clientId)
             return;
 
-        ConnectionCheckpoint.ConnectingClientId = null;
+        ConnectionEvents.ConnectingClientId = null;
         _currentConnectingExpiration = 0;
     }
 
@@ -278,7 +278,7 @@ internal class JoinQueuePatches
         if (!target.IsServer)
             return;
 
-        if (ConnectionCheckpoint.ConnectingClientId is null)
+        if (ConnectionEvents.ConnectingClientId is null)
             return;
 
         var clientId = rpcParams.Server.Receive.SenderClientId;
@@ -292,7 +292,7 @@ internal class JoinQueuePatches
         if (!target.IsServer)
             return;
 
-        if (ConnectionCheckpoint.ConnectingClientId is null)
+        if (ConnectionEvents.ConnectingClientId is null)
             return;
 
         var clientId = rpcParams.Server.Receive.SenderClientId;
@@ -306,7 +306,7 @@ internal class JoinQueuePatches
         if (!target.IsServer)
             return;
 
-        if (ConnectionCheckpoint.ConnectingClientId is null)
+        if (ConnectionEvents.ConnectingClientId is null)
             return;
 
         var clientId = rpcParams.Server.Receive.SenderClientId;
@@ -325,12 +325,12 @@ internal class JoinQueuePatches
         try
         {
             //check if current connection reached all checkpoints!
-            if (ConnectionCheckpoint.HasCompletedAllCheckpoints && ConnectionCheckpoint.ConnectingClientId != null)
+            if (ConnectionEvents.HasCompletedAllCheckpoints && ConnectionEvents.ConnectingClientId != null)
             {
-                var clientId = ConnectionCheckpoint.ConnectingClientId.Value;
+                var clientId = ConnectionEvents.ConnectingClientId.Value;
 
                 LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
-                ConnectionCheckpoint.ConnectingClientId = null;
+                ConnectionEvents.ConnectingClientId = null;
                 _currentConnectingExpiration = (ulong)(Environment.TickCount +
                                                        LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value);
 
@@ -340,9 +340,9 @@ internal class JoinQueuePatches
             }
 
             //if we are still waiting for a connection to complete
-            if (ConnectionCheckpoint.ConnectingClientId.HasValue)
+            if (ConnectionEvents.ConnectingClientId.HasValue)
             {
-                var clientId = ConnectionCheckpoint.ConnectingClientId.Value;
+                var clientId = ConnectionEvents.ConnectingClientId.Value;
 
                 //wait till the timeout expires
                 if ((ulong)Environment.TickCount < _currentConnectingExpiration)
@@ -354,7 +354,7 @@ internal class JoinQueuePatches
                     LobbyControl.Log.LogWarning(
                         $"Connection to {clientId} expired, Disconnecting!");
                     LobbyControl.Log.LogWarning(
-                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionCheckpoint.MissingCheckpoints)}]");
+                        $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", ConnectionEvents.MissingCheckpoints)}]");
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
@@ -366,7 +366,7 @@ internal class JoinQueuePatches
                 }
 
                 //allow the connection of the next client
-                ConnectionCheckpoint.ConnectingClientId = null;
+                ConnectionEvents.ConnectingClientId = null;
                 _currentConnectingExpiration = 0;
             }
 
@@ -391,7 +391,7 @@ internal class JoinQueuePatches
                 if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
                     return;
 
-                ConnectionCheckpoint.ConnectingClientId = entry.request.ClientNetworkId;
+                ConnectionEvents.ConnectingClientId = entry.request.ClientNetworkId;
                 _currentConnectingExpiration = (ulong)(Environment.TickCount +
                                                        LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value);
                 return;
@@ -420,7 +420,7 @@ internal class JoinQueuePatches
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnLocalDisconnect))]
     private static void FlushConnectionQueue()
     {
-        ConnectionCheckpoint.ConnectingClientId = null;
+        ConnectionEvents.ConnectingClientId = null;
         _currentConnectingExpiration = 0UL;
         if (ConnectionQueue.Count > 0)
         {
@@ -444,7 +444,7 @@ internal class JoinQueuePatches
 
     private static bool CanStartGame()
     {
-        return !ConnectionCheckpoint.ConnectingClientId.HasValue && ConnectionQueue.IsEmpty && !_testValue;
+        return !ConnectionEvents.ConnectingClientId.HasValue && ConnectionQueue.IsEmpty && !_testValue;
     }
 
     private static void CheckValidStart(Action<StartOfRound> orig, StartOfRound @this)
@@ -457,7 +457,7 @@ internal class JoinQueuePatches
 
         if (!CanStartGame())
         {
-            var count = ConnectionQueue.Count + (ConnectionCheckpoint.ConnectingClientId.HasValue ? 1 : 0);
+            var count = ConnectionQueue.Count + (ConnectionEvents.ConnectingClientId.HasValue ? 1 : 0);
 
             var leverScript = Object.FindAnyObjectByType<StartMatchLever>();
 
