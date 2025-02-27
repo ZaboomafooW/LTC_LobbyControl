@@ -116,8 +116,6 @@ internal class LobbyControl : BaseUnityPlugin
             //SteamLobby
             SteamLobby.AutoLobby = config.Bind("SteamLobby", "auto_lobby", false
                 , "automatically reopen the lobby as soon as you reach orbit");
-            SteamLobby.RadarFix = config.Bind("SteamLobby", "radar_fix", true
-                , "fix mismatched radar names if a radar booster was activated during the play session");
             //LogSpam
             LogSpam.Enabled = config.Bind("LogSpam", "enabled", true
                 , "prevent some annoying log spam");
@@ -149,7 +147,6 @@ internal class LobbyControl : BaseUnityPlugin
                 LethalConfigProxy.AddConfig(SaveLimit.Enabled);
                 //SteamLobby
                 LethalConfigProxy.AddConfig(SteamLobby.AutoLobby);
-                LethalConfigProxy.AddConfig(SteamLobby.RadarFix);
                 //LogSpam
                 LethalConfigProxy.AddConfig(LogSpam.Enabled);
                 LethalConfigProxy.AddConfig(LogSpam.CalculatePolygonPath);
@@ -180,7 +177,6 @@ internal class LobbyControl : BaseUnityPlugin
         internal static class SteamLobby
         {
             internal static ConfigEntry<bool> AutoLobby;
-            internal static ConfigEntry<bool> RadarFix;
         }
 
         internal static class SaveLimit
