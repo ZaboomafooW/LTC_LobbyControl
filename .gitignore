@@ -3,5 +3,5 @@ packages
 Releases
 **/bin
 **/obj
-**/GameDirectory.targets
 *.sln.DotSettings.user
+Output/

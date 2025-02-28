@@ -25,9 +25,9 @@ namespace LobbyControl;
 [BepInDependency("BMX.LobbyCompatibility", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 internal class LobbyControl : BaseUnityPlugin
 {
-    public const string GUID = "mattymatty.LobbyControl";
-    public const string NAME = "LobbyControl";
-    public const string VERSION = "2.5.0";
+    public const string GUID = MyPluginInfo.PLUGIN_GUID;
+    public const string NAME = MyPluginInfo.PLUGIN_NAME;
+    public const string VERSION = MyPluginInfo.PLUGIN_VERSION;
 
     public static LobbyControl Instance;
 
