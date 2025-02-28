@@ -57,17 +57,18 @@ Terminal Command:
 [option]  means required  
 (option)  means optional
 
-#### Sub-Commnads:
-- status        : prints the current lobby status
-- open          : open the lobby
-- close         : close the lobby
-- private       : set lobby to Invite Only
-- friend        : set lobby to Friends Only
-- public        : set lobby to Public
+#### Sub-Commands:
+- help           : print the list of commands and the description
+- status         : prints the current lobby status
+- open           : open the lobby
+- close          : close the lobby
+- private        : set lobby to Invite Only
+- friend         : set lobby to Friends Only
+- public         : set lobby to Public
 - rename \[name] : change the name of the lobby
-- autosave      : toggle the autosave state
-- save (name)   : forcefully save the lobby
-- load (name)   : re-load the lobby from SaveFile
+- autosave       : toggle the autosave state
+- save (name)    : forcefully save the lobby
+- load (name)    : re-load the lobby from SaveFile
 
 Differences to [ShipLobby](https://thunderstore.io/c/lethal-company/p/tinyhoot/ShipLobby/)
 ------------------------
