@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Timers;
 using GameNetcodeStuff;
 using HarmonyLib;
 using LobbyControl.API;
@@ -138,11 +139,14 @@ internal class JoinQueuePatches
 
     //--------------------JOIN QUEUE LOGIC----------------------------
 
-    private static readonly
-        ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
-            response)> ConnectionQueue = new();
+    private static readonly ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request,
+        NetworkManager.ConnectionApprovalResponse
+        response)> ConnectionQueue = new();
 
-    private static long _currentConnectingExpiration;
+    private static readonly Timer ConnectionTimer = new()
+    {
+        AutoReset = false
+    };
 
     internal static void Init()
     {
@@ -231,6 +235,13 @@ internal class JoinQueuePatches
         if (ConnectionEvents.ConnectingClientId != clientId)
             LobbyControl.Log.LogError(
                 $"client {clientId} connected while {ConnectionEvents.ConnectingClientId} was still being processed!");
+        else
+        {
+            //reset timeout to be a bit more lenient
+            ConnectionTimer.Stop();
+            ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+            ConnectionTimer.Start();
+        }
     }
 
     [HarmonyPostfix]
@@ -264,11 +275,19 @@ internal class JoinQueuePatches
 
         LobbyControl.Log.LogInfo($"{clientId} disconnected");
 
-        if (ConnectionEvents.ConnectingClientId != clientId)
-            return;
-
-        ConnectionEvents.ConnectingClientId = null;
-        _currentConnectingExpiration = 0;
+        if (ConnectionEvents.ConnectingClientId == clientId)
+        {
+            ConnectionEvents.ConnectingClientId = null;
+            ConnectionTimer.Stop();
+        }
+        else
+        {
+            //if we disconnected while in queue mark the response as Approved to skip it
+            foreach (var (_, response) in ConnectionQueue.Where(e => e.request.ClientNetworkId == clientId))
+            {
+                response.Approved = false;
+            }
+        }
     }
 
     [HarmonyPrefix]
@@ -342,14 +361,11 @@ internal class JoinQueuePatches
                 LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
                 ConnectionEvents.ConnectingClientId = null;
 
-                //var now = Environment.TickCount;
-                var now = DateTime.Now.Ticks / 10000;
-                var remaining = _currentConnectingExpiration - now;
+                ConnectionTimer.Stop();
+                ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value;
+                ConnectionTimer.Start();
 
-                _currentConnectingExpiration = now +
-                                               LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value;
-
-                LobbyControl.Log.LogWarning($"{clientId} completed the connection with {remaining}ms before timeout");
+                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
 
                 ConnectionEvents.RaiseConnectionCompleteServerEvent(clientId);
             }
@@ -360,15 +376,12 @@ internal class JoinQueuePatches
                 var clientId = ConnectionEvents.ConnectingClientId.Value;
 
                 //wait till the timeout expires
-                if (DateTime.Now.Ticks / 10000 < _currentConnectingExpiration)
+                if (ConnectionTimer.Enabled)
                     return;
 
                 //if there was an actual client
                 if (clientId != 0L)
                 {
-                    LobbyControl.Log.LogWarning(
-                        $"Connection to {clientId} expired, Disconnecting!");
-
                     var missing = ConnectionEvents.MissingCheckpoints;
 
                     LobbyControl.Log.LogWarning(
@@ -378,6 +391,8 @@ internal class JoinQueuePatches
                         HUDManager.Instance.DisplayTip("Connection Timeout",
                             $"Client {clientId} missed {missing.Length}\nCheckpoints before the timeout");
 
+                    LobbyControl.Log.LogError(
+                        $"Connection to {clientId} expired, Disconnecting!");
                     try
                     {
                         NetworkManager.Singleton.DisconnectClient(clientId);
@@ -390,14 +405,13 @@ internal class JoinQueuePatches
 
                 //allow the connection of the next client
                 ConnectionEvents.ConnectingClientId = null;
-                _currentConnectingExpiration = 0;
             }
 
             //if we can let new connections in
             if (_allowNewConnection)
             {
                 //wait until the delay between connections
-                if (DateTime.Now.Ticks / 10000 < _currentConnectingExpiration)
+                if (ConnectionEvents.ConnectingClientId.HasValue || ConnectionTimer.Enabled)
                     return;
 
                 if (!ConnectionQueue.TryDequeue(out var entry))
@@ -415,12 +429,13 @@ internal class JoinQueuePatches
                     return;
 
                 ConnectionEvents.ConnectingClientId = entry.request.ClientNetworkId;
-                _currentConnectingExpiration = DateTime.Now.Ticks / 10000 +
-                                               LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+                ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+                ConnectionTimer.Start();
+
                 return;
             }
 
-            if (ConnectionQueue.IsEmpty)
+            if (!ConnectionQueue.IsEmpty)
                 return;
 
             foreach (var (_, approvalResponse) in ConnectionQueue)
@@ -444,7 +459,8 @@ internal class JoinQueuePatches
     private static void FlushConnectionQueue()
     {
         ConnectionEvents.ConnectingClientId = null;
-        _currentConnectingExpiration = 0;
+        ConnectionTimer.Stop();
+
         if (ConnectionQueue.Count > 0)
         {
             LobbyControl.Log.LogWarning(

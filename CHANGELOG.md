@@ -1,3 +1,6 @@
+## v2.5.2
+- use System.Timers.Timer to handle the timeout
+
 ## v2.5.1
 - correctly use milliseconds instead of Ticks
 
