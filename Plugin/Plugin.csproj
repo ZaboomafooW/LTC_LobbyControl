@@ -38,7 +38,7 @@
             <PluginsDistributionDir>$(DistributionDir)\BepInEx\plugins</PluginsDistributionDir>
         </PropertyGroup>
 
-        <Message Importance="High" Text="Copyng Plugin to DistributionDir"/>
+        <Message Importance="High" Text="Copying Plugin to DistributionDir"/>
 
         <MakeDir Directories="$(PluginsDistributionDir)"/>
         <ItemGroup>
