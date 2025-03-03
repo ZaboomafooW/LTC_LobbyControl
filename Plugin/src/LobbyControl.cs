@@ -26,6 +26,7 @@ namespace LobbyControl;
 //incompatibilities
 [BepInDependency("com.github.tinyhoot.ShipLobby", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("twig.latecompany", Flags: BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("McBowie.VeryLateCompany", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("com.potatoepet.AdvancedCompany", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 internal class LobbyControl : BaseUnityPlugin
 {
@@ -52,6 +53,7 @@ internal class LobbyControl : BaseUnityPlugin
     [
         "com.github.tinyhoot.ShipLobby",
         "twig.latecompany",
+        "McBowie.VeryLateCompany",
         "com.potatoepet.AdvancedCompany"
     ];
 
