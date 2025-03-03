@@ -1,3 +1,8 @@
+## v2.5.4
+- add popup when LLL is detected with a low ConnectionTimeout
+- increase the internal unity timeout to not disconnect while in queue
+- add new hard-incompatibility with VeryLateCompany
+
 ## v2.5.2
 - use System.Timers.Timer to handle the timeout
 
