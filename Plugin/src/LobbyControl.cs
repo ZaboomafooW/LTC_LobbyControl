@@ -13,6 +13,7 @@ using LobbyControl.Patches;
 using LobbyControl.PopUp;
 using LobbyControl.TerminalCommands;
 using MonoMod.RuntimeDetour;
+using Unity.Netcode;
 using PluginInfo = BepInEx.PluginInfo;
 
 namespace LobbyControl;
@@ -145,9 +146,9 @@ internal class LobbyControl : BaseUnityPlugin
             JoinQueue.Enabled = config.Bind("JoinQueue", "enabled", true
                 , "handle joining players as a queue instead of at the same time");
             JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 20000
-                , "After how much time discard a hanging connection");
+                , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(1000, int.MaxValue)));
             JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
-                , "Delay between each successful connection");
+                , new ConfigDescription("Delay between each successful connection", new AcceptableValueRange<int>(100, int.MaxValue)));
             JoinQueue.VisualPopup = config.Bind("JoinQueue", "timeout_notification", true
                 , "show a popup when a client fails to join before the timeout");
             //Networking
@@ -158,6 +159,17 @@ internal class LobbyControl : BaseUnityPlugin
             Networking.ResetPlayerValues = config.Bind("Networking", "reset_player_values", true
                 , "allow host to force clients to reset most fields of a playerObject ( fix for invisible players )");
 
+            //update the networkmanager
+            JoinQueue.ConnectionTimeout.SettingChanged +=
+                (_, _) =>
+                {
+                    var networkManager = NetworkManager.Singleton;
+                    if (networkManager is null)
+                        return;
+
+                    networkManager.NetworkConfig.ClientConnectionBufferTimeout =
+                        JoinQueue.ConnectionTimeout.Value / 1000 * 4;
+                };
 
             if (LethalConfigProxy.Enabled)
             {

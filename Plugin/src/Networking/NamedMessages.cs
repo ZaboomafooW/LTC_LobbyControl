@@ -19,6 +19,13 @@ internal static class NamedMessages
             OnResetPlayerValuesClientRpc);
     }
 
+    internal static void UnregisterNamedMessages()
+    {
+        NetworkManager.Singleton.CustomMessagingManager.UnregisterNamedMessageHandler(ReorderRadarClientRpcMessage);
+        NetworkManager.Singleton.CustomMessagingManager
+            .UnregisterNamedMessageHandler(ResetPlayerValuesClientRpcMessage);
+    }
+
     internal static void ReorderRadarClientRpc(IReadOnlyList<ulong> targets = null)
     {
         if (!NetworkManager.Singleton.IsServer)

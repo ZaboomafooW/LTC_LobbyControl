@@ -158,7 +158,7 @@ internal class JoinQueuePatches
             var harmonyTarget = AccessTools.Method(typeof(StartOfRound), $"__rpc_handler_{id}");
             var harmonyFinalizer =
                 AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSyncAlreadyHeldObjectsServerRpc));
-            LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
+            LobbyControl.Harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
         {
@@ -173,7 +173,7 @@ internal class JoinQueuePatches
         {
             var harmonyTarget = AccessTools.Method(typeof(PlayerControllerB), $"__rpc_handler_{id}");
             var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSendNewPlayerValuesServerRpc));
-            LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
+            LobbyControl.Harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
         {
@@ -188,7 +188,7 @@ internal class JoinQueuePatches
         {
             var harmonyTarget = AccessTools.Method(typeof(HUDManager), $"__rpc_handler_{id}");
             var harmonyFinalizer = AccessTools.Method(typeof(JoinQueuePatches), nameof(OnSyncAllPlayerLevelsServerRpc));
-            LobbyControl._harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
+            LobbyControl.Harmony.Patch(harmonyTarget, null, null, null, new HarmonyMethod(harmonyFinalizer), null);
         }
         else
         {
