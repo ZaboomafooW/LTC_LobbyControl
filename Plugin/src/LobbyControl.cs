@@ -18,11 +18,14 @@ using PluginInfo = BepInEx.PluginInfo;
 namespace LobbyControl;
 
 [BepInPlugin(GUID, NAME, VERSION)]
+//soft-deps
+[BepInDependency("FlipMods.ReservedItemSlotCore", Flags: BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("imabatby.lethallevelloader", Flags: BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("BMX.LobbyCompatibility", Flags: BepInDependency.DependencyFlags.SoftDependency)]
+//incompatibilities
 [BepInDependency("com.github.tinyhoot.ShipLobby", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("twig.latecompany", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("com.potatoepet.AdvancedCompany", Flags: BepInDependency.DependencyFlags.SoftDependency)]
-[BepInDependency("FlipMods.ReservedItemSlotCore", Flags: BepInDependency.DependencyFlags.SoftDependency)]
-[BepInDependency("BMX.LobbyCompatibility", Flags: BepInDependency.DependencyFlags.SoftDependency)]
 internal class LobbyControl : BaseUnityPlugin
 {
     public const string GUID = MyPluginInfo.PLUGIN_GUID;
@@ -33,7 +36,7 @@ internal class LobbyControl : BaseUnityPlugin
 
     internal static ManualLogSource Log;
 
-    internal static Harmony _harmony;
+    internal static readonly Harmony Harmony = new Harmony(GUID);
 
     public static bool CanModifyLobby = true;
 
@@ -73,9 +76,8 @@ internal class LobbyControl : BaseUnityPlugin
                 }
 
                 Log.LogError($"{incompatibleMods.Length} incompatible mods found! Disabling!");
-                var harmony = new Harmony(GUID);
-                PopUpPatch.PopUps.Add(new Tuple<string, string>("LC_Incompatibility", sb.ToString()));
-                harmony.PatchAll(typeof(PopUpPatch));
+                PopUpPatch.PopUps.Add(("LC_Incompatibility", sb.ToString()));
+                Harmony.PatchAll(typeof(PopUpPatch));
             }
             else
             {
@@ -90,9 +92,25 @@ internal class LobbyControl : BaseUnityPlugin
                 LobbyCommand.Init();
 
                 Log.LogInfo("Patching Methods");
-                _harmony = new Harmony(GUID);
-                _harmony.PatchAll(Assembly.GetExecutingAssembly());
+
+                Harmony.PatchAll(typeof(PopUpPatch));
+
+                Harmony.PatchAll(typeof(JoinQueuePatches));
                 JoinQueuePatches.Init();
+                Harmony.PatchAll(typeof(LateJoinPatches));
+                Harmony.PatchAll(typeof(LimitPatcher));
+                Harmony.PatchAll(typeof(LobbyPatcher));
+                Harmony.PatchAll(typeof(LogSpamPatches));
+                Harmony.PatchAll(typeof(NetworkManagerPatch));
+                Harmony.PatchAll(typeof(SavePatches));
+                Harmony.PatchAll(typeof(TerminalPatch));
+
+                if (LethalLevelLoaderDependency.Enabled)
+                {
+                    if (PluginConfig.JoinQueue.Enabled.Value && PluginConfig.JoinQueue.ConnectionTimeout.Value < 40000)
+                        PopUpPatch.PopUps.Add(("LC_LLL_Warning",
+                            "LobbyControl detected LethalLevelLoader with a low JoinQueue timeout settings.\nyou might want to increase the timeout to 40s or more!"));
+                }
 
                 Log.LogInfo(NAME + " v" + VERSION + " Loaded!");
             }
