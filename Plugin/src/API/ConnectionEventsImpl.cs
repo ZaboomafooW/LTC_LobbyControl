@@ -24,7 +24,6 @@ public static partial class ConnectionEvents
     {
         get
         {
-            var missing = MissingCheckpointMask;
             using (ListPool<ConnectionCheckpoint>.Get(out var list))
             {
                 foreach (var references in ConnectionCheckpoint.RegisteredCheckpoints.Values)
@@ -35,7 +34,7 @@ public static partial class ConnectionEvents
                     if (checkpoint.IsDisposed)
                         continue;
 
-                    if ((checkpoint.Mask & missing) != 0)
+                    if ((_currentCheckpoints & checkpoint.Mask) == 0)
                         list.Add(checkpoint);
                 }
 
@@ -81,6 +80,12 @@ public static partial class ConnectionEvents
         NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(
             RaiseConnectionCompleteEventClientRpcMessage,
             OnRaiseConnectionCompleteEventClientRpc);
+    }
+
+    internal static void UnregisterNamedMessages()
+    {
+        NetworkManager.Singleton.CustomMessagingManager.UnregisterNamedMessageHandler(
+            RaiseConnectionCompleteEventClientRpcMessage);
     }
 
 
