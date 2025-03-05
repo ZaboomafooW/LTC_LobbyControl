@@ -79,7 +79,7 @@ internal class LimitPatcher
             .ReverseFind([
                 ILMatcher.Ldloc(),
                 ILMatcher.Ldc(),
-                ILMatcher.Opcode(OpCodes.Ble).CaptureLabelOperandAs(out var unlockableInBoundsLabel),
+                ILMatcher.Opcode(OpCodes.Ble).CaptureOperandAs(out Label unlockableInBoundsLabel),
             ]);
 
         if (!injector.IsValid)
@@ -108,7 +108,7 @@ internal class LimitPatcher
             .ReverseFind([
                 ILMatcher.Ldloc(),
                 ILMatcher.Ldc(),
-                ILMatcher.Opcode(OpCodes.Ble).CaptureLabelOperandAs(out var itemInBoundsLabel),
+                ILMatcher.Opcode(OpCodes.Ble).CaptureOperandAs(out Label itemInBoundsLabel),
             ]);
 
         if (!injector.IsValid)

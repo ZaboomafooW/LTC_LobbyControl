@@ -18,6 +18,12 @@ internal class ILInjector(IEnumerable<CodeInstruction> instructions, ILGenerator
 
     private int matchEnd = -1;
 
+    public int Index
+    {
+        get => index;
+        set => index = value;
+    }
+
     public ILInjector GoToStart()
     {
         matchEnd = index;
@@ -118,7 +124,7 @@ internal class ILInjector(IEnumerable<CodeInstruction> instructions, ILGenerator
             stackPosition += instruction.PushCount();
             stackPosition -= instruction.PopCount();
 
-            if (stackPosition > popIndex)
+            if (stackPosition >= popIndex)
                 return this;
 
             index--;
@@ -437,7 +443,7 @@ internal class ILInjector(IEnumerable<CodeInstruction> instructions, ILGenerator
             builder.AppendLine($"{i}: {instructions[i]}");
         }
 
-        LobbyControl.Log.LogInfo(builder);
+        LobbyControl.Log.LogFatal(builder);
         return this;
     }
 

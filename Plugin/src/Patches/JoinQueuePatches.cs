@@ -70,7 +70,7 @@ internal class JoinQueuePatches
                 ILMatcher.Call(typeof(GameNetworkManager).GetProperty(nameof(GameNetworkManager.Instance))?.GetMethod),
                 ILMatcher.Ldfld(typeof(GameNetworkManager).GetField(nameof(GameNetworkManager.gameHasStarted),
                     BindingFlags.Instance | BindingFlags.Public)),
-                ILMatcher.Opcode(OpCodes.Brfalse).CaptureLabelOperandAs(out var gameHasStartedLabel),
+                ILMatcher.Opcode(OpCodes.Brfalse).CaptureOperandAs(out Label gameHasStartedLabel),
             ]);
 
         if (!injector.IsValid)
