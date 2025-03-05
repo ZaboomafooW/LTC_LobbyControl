@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -474,6 +475,79 @@ internal class JoinQueuePatches
             entry.response.Pending = false;
         }
     }
+    //-----------HOST TIMEOUT DETECTION--------------
+
+
+    private static readonly Stopwatch ConnectionStopwatch = new();
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Awake))]
+    private static void OnHostStartLoad()
+    {
+        if (!NetworkManager.Singleton.IsServer)
+            return;
+
+        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+            return;
+
+        ConnectionStopwatch.Restart();
+    }
+
+    [HarmonyTranspiler]
+    [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.StartSpatialVoiceChat), MethodType.Enumerator)]
+    private static IEnumerable<CodeInstruction> PatchStartSpatialVoiceChat(IEnumerable<CodeInstruction> instructions,
+        ILGenerator ilGenerator)
+    {
+        var codes = instructions.ToList();
+
+        var injector = new ILInjector(codes, ilGenerator);
+
+        injector.Find([
+            ILMatcher.Callvirt(typeof(HUDManager).GetMethod(nameof(HUDManager.SyncAllPlayerLevelsServerRpc),
+                [typeof(int), typeof(int)]))
+        ]);
+
+        if (!injector.IsValid)
+        {
+            LobbyControl.Log.LogFatal(
+                "Failed to find HUDManager.SyncPlayerLevelServerRpc in StartOfRound.StartSpatialVoiceChat!");
+            return codes;
+        }
+
+        injector
+            .GoToMatchEnd()
+            .Insert(new CodeInstruction(OpCodes.Call,
+                typeof(JoinQueuePatches).GetMethod(nameof(OnHostLoaded),
+                    BindingFlags.Static | BindingFlags.NonPublic)));
+
+        return injector.ReleaseInstructions();
+    }
+
+    private static void OnHostLoaded()
+    {
+        if (!NetworkManager.Singleton.IsServer)
+            return;
+
+        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+            return;
+
+        ConnectionStopwatch.Stop();
+
+        var elapsed = ConnectionStopwatch.ElapsedMilliseconds;
+        var currentTimeout = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+
+        LobbyControl.Log.LogDebug($"Lobby took {elapsed}ms to load");
+
+        if (currentTimeout >= elapsed)
+            return;
+
+        LobbyControl.Log.LogWarning(
+            $"Lobby took {elapsed}ms to load but the configured connectionTimeout is only {currentTimeout}ms !");
+
+        HUDManager.Instance.StartCoroutine(HudUtils.ShowWarningAfterDelay("Low Connection Timeout!",
+            $"Lobby took {elapsed}ms to load but the configured connectionTimeout is only {currentTimeout}ms", 5));
+    }
+
 
     //--------------HANDLE SHIP LEVER----------------
 
@@ -503,10 +577,13 @@ internal class JoinQueuePatches
             leverScript.CancelStartGame();
             leverScript.CancelStartGameClientRpc();
 
-            HUDManager.Instance.DisplayTip(
-                "GAME START CANCELLED",
-                $"{count} Players Connecting!!",
-                true);
+            HUDManager.Instance.StartCoroutine(
+                HudUtils.ShowWarningAfterDelay(
+                    "GAME START CANCELLED",
+                    $"{count} Players Connecting!!",
+                    0,
+                    true
+                ));
 
             HUDManager.Instance.AddTextMessageServerRpc(
                 $"there are still {count} Players connecting!!\n");

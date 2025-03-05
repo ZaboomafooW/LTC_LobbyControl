@@ -108,13 +108,6 @@ internal class LobbyControl : BaseUnityPlugin
                 Harmony.PatchAll(typeof(SavePatches));
                 Harmony.PatchAll(typeof(TerminalPatch));
 
-                if (LethalLevelLoaderDependency.Enabled)
-                {
-                    if (PluginConfig.JoinQueue.Enabled.Value && PluginConfig.JoinQueue.ConnectionTimeout.Value < 40000)
-                        PopUpPatch.PopUps.Add(("LC_LLL_Warning",
-                            "LobbyControl detected LethalLevelLoader with a low JoinQueue timeout settings.\nyou might want to increase the timeout to 40s or more!"));
-                }
-
                 Log.LogInfo(NAME + " v" + VERSION + " Loaded!");
             }
         }
