@@ -103,7 +103,7 @@ internal class LateJoinPatches
         else
         {
             HUDManager.Instance.StartCoroutine(HudUtils.ShowTipAfterDelay("Late-Join SYSTEM",
-                "To allow new players to join the lobby type \"lobby open\" in Terminal or set \"auto_lobby\" in config",
+                "To allow new players to join the lobby use \"lobby open\" in Terminal or \"auto_lobby\" in config",
                 7, "LCTip_LCAutoLobby"));
         }
     }
