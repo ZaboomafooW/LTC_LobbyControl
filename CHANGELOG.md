@@ -1,3 +1,11 @@
+## v2.5.6
+- change min timeout from 1s to 10s
+- add game tips about late-join
+- add opt-in connection notifications
+
+## v2.5.5
+- replace boot Popup with ingame Tip after lobby load
+
 ## v2.5.4
 - add popup when LLL is detected with a low ConnectionTimeout
 - increase the internal unity timeout to not disconnect while in queue
