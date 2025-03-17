@@ -141,7 +141,7 @@ internal class LobbyControl : BaseUnityPlugin
             JoinQueue.Enabled = config.Bind("JoinQueue", "enabled", true
                 , "handle joining players as a queue instead of at the same time");
             JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 20000
-                , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(1000, int.MaxValue)));
+                , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(10000, int.MaxValue)));
             JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
                 , new ConfigDescription("Delay between each successful connection", new AcceptableValueRange<int>(100, int.MaxValue)));
             JoinQueue.VisualPopup = config.Bind("JoinQueue", "timeout_notification", true
