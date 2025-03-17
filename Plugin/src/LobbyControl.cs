@@ -144,8 +144,10 @@ internal class LobbyControl : BaseUnityPlugin
                 , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(10000, int.MaxValue)));
             JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
                 , new ConfigDescription("Delay between each successful connection", new AcceptableValueRange<int>(100, int.MaxValue)));
-            JoinQueue.VisualPopup = config.Bind("JoinQueue", "timeout_notification", true
+            JoinQueue.TimeoutPopup = config.Bind("JoinQueue", "timeout_notification", true
                 , "show a popup when a client fails to join before the timeout");
+            JoinQueue.ConnectionPopup = config.Bind("JoinQueue", "connection_notification", false
+                , "show a popup when a client tries to join");
             //Networking
             Networking.Enabled = config.Bind("Networking", "enabled", true
                 , "handle extra actions requested by host");
@@ -180,7 +182,8 @@ internal class LobbyControl : BaseUnityPlugin
                 LethalConfigProxy.AddConfig(JoinQueue.Enabled);
                 LethalConfigProxy.AddConfig(JoinQueue.ConnectionTimeout);
                 LethalConfigProxy.AddConfig(JoinQueue.ConnectionDelay);
-                LethalConfigProxy.AddConfig(JoinQueue.VisualPopup);
+                LethalConfigProxy.AddConfig(JoinQueue.TimeoutPopup);
+                LethalConfigProxy.AddConfig(JoinQueue.ConnectionPopup);
                 //Networking
                 LethalConfigProxy.AddConfig(Networking.Enabled);
                 LethalConfigProxy.AddConfig(Networking.SyncRadarNames);
@@ -221,7 +224,8 @@ internal class LobbyControl : BaseUnityPlugin
             internal static ConfigEntry<bool> Enabled;
             internal static ConfigEntry<int> ConnectionTimeout;
             internal static ConfigEntry<int> ConnectionDelay;
-            internal static ConfigEntry<bool> VisualPopup;
+            internal static ConfigEntry<bool> TimeoutPopup;
+            internal static ConfigEntry<bool> ConnectionPopup;
         }
 
         internal static class Networking

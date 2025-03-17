@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text;
+using System.Threading.Tasks;
 using System.Timers;
 using GameNetcodeStuff;
 using HarmonyLib;
@@ -13,6 +15,7 @@ using LobbyControl.Networking;
 using LobbyControl.Utils;
 using LobbyControl.Utils.IL;
 using MonoMod.RuntimeDetour;
+using Steamworks;
 using Unity.Netcode;
 using Object = UnityEngine.Object;
 
@@ -133,16 +136,41 @@ internal class JoinQueuePatches
             return null;
 
         response.Pending = true;
-        ConnectionQueue.Enqueue((request, response));
+
+        var array = Encoding.ASCII.GetString(request.Payload).Split(",");
+
+        ulong? friendId = null;
+
+        if (!__instance.disableSteam && array.Length > 1 && ulong.TryParse(array[1], out var steamID))
+        {
+            friendId = steamID;
+            Task.Run(() => SteamFriends.RequestUserInformation(steamID));
+
+            if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
+            {
+                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                    $"Player {new Friend(steamID).Name}({request.ClientNetworkId}) requested a connection"));
+            }
+        }
+        else
+        {
+            if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
+            {
+                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                    $"Client {request.ClientNetworkId} requested a connection"));
+            }
+        }
+
+        ConnectionQueue.Enqueue((request, response, friendId));
         LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{ConnectionQueue.Count}");
         return null;
     }
 
     //--------------------JOIN QUEUE LOGIC----------------------------
 
-    private static readonly ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request,
-        NetworkManager.ConnectionApprovalResponse
-        response)> ConnectionQueue = new();
+    private static readonly
+        ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
+            response, ulong? steamId)> ConnectionQueue = new();
 
     private static readonly Timer ConnectionTimer = new()
     {
@@ -284,7 +312,7 @@ internal class JoinQueuePatches
         else
         {
             //if we disconnected while in queue mark the response as Approved to skip it
-            foreach (var (_, response) in ConnectionQueue.Where(e => e.request.ClientNetworkId == clientId))
+            foreach (var (_, response, _) in ConnectionQueue.Where(e => e.request.ClientNetworkId == clientId))
             {
                 response.Approved = false;
             }
@@ -375,6 +403,7 @@ internal class JoinQueuePatches
             if (ConnectionEvents.ConnectingClientId.HasValue)
             {
                 var clientId = ConnectionEvents.ConnectingClientId.Value;
+                var steamId = ConnectionEvents.ConnectingSteamId;
 
                 //wait till the timeout expires
                 if (ConnectionTimer.Enabled)
@@ -388,9 +417,17 @@ internal class JoinQueuePatches
                     LobbyControl.Log.LogWarning(
                         $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
 
-                    if (LobbyControl.PluginConfig.JoinQueue.VisualPopup.Value)
-                        HUDManager.Instance.DisplayTip("Connection Timeout",
-                            $"Client {clientId} missed {missing.Length}\nCheckpoints before the timeout");
+                    if (LobbyControl.PluginConfig.JoinQueue.TimeoutPopup.Value)
+                        if (steamId.HasValue)
+                            HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection Timeout",
+                                $"Player {new Friend(steamId.Value).Name}({clientId})\nCheckpoints before the timeout"));
+                        else
+                            HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection Timeout",
+                                $"Client {clientId} missed {missing.Length}\nCheckpoints before the timeout"));
+
+                    HUDManager.Instance.StartCoroutine(HudUtils.ShowTipAfterDelay("Connection Timeout",
+                        "If clients frequently fail to connect maybe consider increasing \"connection_timeout_ms\" in config",
+                        2, "LCTip_LCTimeout"));
 
                     LobbyControl.Log.LogError(
                         $"Connection to {clientId} expired, Disconnecting!");
@@ -430,8 +467,14 @@ internal class JoinQueuePatches
                     return;
 
                 ConnectionEvents.ConnectingClientId = entry.request.ClientNetworkId;
+                ConnectionEvents.ConnectingSteamId = entry.steamId;
                 ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
                 ConnectionTimer.Start();
+
+                if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
+                    if (entry.steamId.HasValue)
+                        HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection resumed",
+                            $"Player {new Friend(entry.steamId.Value).Name}({entry.request.ClientNetworkId}) is now connecting"));
 
                 return;
             }
@@ -439,7 +482,7 @@ internal class JoinQueuePatches
             if (!ConnectionQueue.IsEmpty)
                 return;
 
-            foreach (var (_, approvalResponse) in ConnectionQueue)
+            foreach (var (_, approvalResponse, _) in ConnectionQueue)
             {
                 approvalResponse.Approved = false;
                 approvalResponse.Reason = "ship has landed!";
@@ -544,7 +587,7 @@ internal class JoinQueuePatches
         LobbyControl.Log.LogWarning(
             $"Lobby took {elapsed}ms to load but the configured connectionTimeout is only {currentTimeout}ms !");
 
-        HUDManager.Instance.StartCoroutine(HudUtils.ShowWarningAfterDelay("Low Connection Timeout!",
+        HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Low Connection Timeout!",
             $"Lobby took {elapsed}ms to load but the configured connectionTimeout is only {currentTimeout}ms", 5));
     }
 
@@ -578,7 +621,7 @@ internal class JoinQueuePatches
             leverScript.CancelStartGameClientRpc();
 
             HUDManager.Instance.StartCoroutine(
-                HudUtils.ShowWarningAfterDelay(
+                HudUtils.ShowMessageAfterDelay(
                     "GAME START CANCELLED",
                     $"{count} Players Connecting!!",
                     0,
