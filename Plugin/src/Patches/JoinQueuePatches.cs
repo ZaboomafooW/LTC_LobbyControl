@@ -307,6 +307,7 @@ internal class JoinQueuePatches
         if (ConnectionEvents.ConnectingClientId == clientId)
         {
             ConnectionEvents.ConnectingClientId = null;
+            ConnectionEvents.ConnectingSteamId = null;
             ConnectionTimer.Stop();
         }
         else
@@ -389,6 +390,7 @@ internal class JoinQueuePatches
 
                 LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
                 ConnectionEvents.ConnectingClientId = null;
+                ConnectionEvents.ConnectingSteamId = null;
 
                 ConnectionTimer.Stop();
                 ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value;
@@ -443,6 +445,7 @@ internal class JoinQueuePatches
 
                 //allow the connection of the next client
                 ConnectionEvents.ConnectingClientId = null;
+                ConnectionEvents.ConnectingSteamId = null;
             }
 
             //if we can let new connections in
@@ -503,6 +506,7 @@ internal class JoinQueuePatches
     private static void FlushConnectionQueue()
     {
         ConnectionEvents.ConnectingClientId = null;
+        ConnectionEvents.ConnectingSteamId = null;
         ConnectionTimer.Stop();
 
         if (ConnectionQueue.Count > 0)
