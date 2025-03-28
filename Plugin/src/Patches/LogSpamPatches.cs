@@ -1,8 +1,6 @@
 ﻿using System;
-using BepInEx;
 using HarmonyLib;
 using Unity.Netcode;
-using UnityEngine;
 
 namespace LobbyControl.Patches;
 
@@ -51,24 +49,18 @@ internal class LogSpamPatches
     [HarmonyPatch]
     internal class AudioSpatializerPatch
     {
-        [HarmonyPostfix]
+        [HarmonyFinalizer]
         [HarmonyPatch(typeof(NetworkSceneManager), nameof(NetworkSceneManager.OnSceneLoaded))]
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.SetPowerOffAtStart))]
         private static void DisableSpatializers()
         {
-            if (!LobbyControl.PluginConfig.LogSpam.AudioSpatializer.Value ||
-                !AudioSettings.GetSpatializerPluginName().IsNullOrWhiteSpace())
+            var startOfRound = StartOfRound.Instance;
+            if (startOfRound == null)
                 return;
 
             try
             {
-                AudioSource[] array = Resources.FindObjectsOfTypeAll<AudioSource>();
-                foreach (AudioSource val in array)
-                {
-                    if (val.spatialize)
-                    {
-                        val.spatialize = false;
-                    }
-                }
+                startOfRound.DisableSpatializationOnAllAudio();
             }
             catch (Exception ex)
             {

@@ -649,7 +649,7 @@ internal class JoinQueuePatches
         __instance.triggerScript.interactable = true;
     }
 
-    [HarmonyPostfix]
+    [HarmonyFinalizer]
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.SetShipReadyToLand))]
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Start))]
     private static void OnReadyToLand()
