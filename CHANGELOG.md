@@ -1,5 +1,5 @@
 ## v2.5.7
-- disable audio spatializers after dungeon generation too
+- removed audio spatializer fix ( split into its own mod )
 
 ## v2.5.6
 - change min timeout from 1s to 10s

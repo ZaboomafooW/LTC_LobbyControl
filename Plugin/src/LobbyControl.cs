@@ -135,8 +135,6 @@ internal class LobbyControl : BaseUnityPlugin
                 , "prevent some annoying log spam");
             LogSpam.CalculatePolygonPath = config.Bind("LogSpam", "CalculatePolygonPath", true
                 , "stop pathfinding for dead Enemies");
-            LogSpam.AudioSpatializer = config.Bind("LogSpam", "audio_spatializer", true
-                , "disable audio spatialization as there is not spatialization plugin");
             //JoinQueue
             JoinQueue.Enabled = config.Bind("JoinQueue", "enabled", true
                 , "handle joining players as a queue instead of at the same time");
@@ -177,7 +175,6 @@ internal class LobbyControl : BaseUnityPlugin
                 //LogSpam
                 LethalConfigProxy.AddConfig(LogSpam.Enabled);
                 LethalConfigProxy.AddConfig(LogSpam.CalculatePolygonPath);
-                LethalConfigProxy.AddConfig(LogSpam.AudioSpatializer);
                 //JoinQueue
                 LethalConfigProxy.AddConfig(JoinQueue.Enabled);
                 LethalConfigProxy.AddConfig(JoinQueue.ConnectionTimeout);
@@ -216,7 +213,6 @@ internal class LobbyControl : BaseUnityPlugin
         {
             internal static ConfigEntry<bool> Enabled;
             internal static ConfigEntry<bool> CalculatePolygonPath;
-            internal static ConfigEntry<bool> AudioSpatializer;
         }
 
         internal static class JoinQueue

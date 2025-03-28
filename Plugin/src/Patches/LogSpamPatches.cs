@@ -1,6 +1,4 @@
-﻿using System;
-using HarmonyLib;
-using Unity.Netcode;
+﻿using HarmonyLib;
 
 namespace LobbyControl.Patches;
 
@@ -43,29 +41,6 @@ internal class LogSpamPatches
                 return true;
 
             return !__instance.isEnemyDead;
-        }
-    }
-
-    [HarmonyPatch]
-    internal class AudioSpatializerPatch
-    {
-        [HarmonyFinalizer]
-        [HarmonyPatch(typeof(NetworkSceneManager), nameof(NetworkSceneManager.OnSceneLoaded))]
-        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.SetPowerOffAtStart))]
-        private static void DisableSpatializers()
-        {
-            var startOfRound = StartOfRound.Instance;
-            if (startOfRound == null)
-                return;
-
-            try
-            {
-                startOfRound.DisableSpatializationOnAllAudio();
-            }
-            catch (Exception ex)
-            {
-                LobbyControl.Log.LogError($"Exception disabling spatializers: {ex}");
-            }
         }
     }
 }
