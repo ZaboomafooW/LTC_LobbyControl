@@ -1,3 +1,6 @@
+## v2.5.7
+- disable audio spatializers after dungeon generation too
+
 ## v2.5.6
 - change min timeout from 1s to 10s
 - add game tips about late-join
