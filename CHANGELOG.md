@@ -1,5 +1,6 @@
 ## v2.5.7
 - removed audio spatializer fix ( split into its own mod )
+- rebuilt for v70
 
 ## v2.5.6
 - change min timeout from 1s to 10s
