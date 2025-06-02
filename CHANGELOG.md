@@ -1,3 +1,6 @@
+## v2.5.9
+- 2nd v70 rebuild
+
 ## v2.5.7
 - removed audio spatializer fix ( split into its own mod )
 - rebuilt for v70

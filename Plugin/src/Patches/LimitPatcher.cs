@@ -67,33 +67,7 @@ internal class LimitPatcher
             return instructions;
 
         var codes = instructions.ToList();
-        // - if (i > 175) {
-        // - {
-        // -   ..
-        // - }
-        //   unlockableIDs.Add(unlockables[i].unlockableID);
-        var injector = new ILInjector(codes)
-            .Find([
-                ILMatcher.Ldfld(typeof(PlaceableShipObject).GetField(nameof(PlaceableShipObject.unlockableID))),
-            ])
-            .ReverseFind([
-                ILMatcher.Ldloc(),
-                ILMatcher.Ldc(),
-                ILMatcher.Opcode(OpCodes.Ble).CaptureOperandAs(out Label unlockableInBoundsLabel),
-            ]);
-
-        if (!injector.IsValid)
-        {
-            // print error
-            LobbyControl.Log.LogWarning("SyncShipUnlockablesServerRpc patch failed 1!!");
-            LobbyControl.Log.LogDebug(string.Join("\n", injector.ReleaseInstructions()));
-            return codes;
-        }
-
-        injector
-            .RemoveLastMatch()
-            .FindLabel(unlockableInBoundsLabel)
-            .RemoveLastMatch();
+        var injector = new ILInjector(codes);
 
         // - if (i > 500) {
         // - {
@@ -113,7 +87,7 @@ internal class LimitPatcher
 
         if (!injector.IsValid)
         {
-            LobbyControl.Log.LogWarning("SyncShipUnlockablesServerRpc patch failed 2!!");
+            LobbyControl.Log.LogWarning("SyncShipUnlockablesServerRpc patch failed 1!!");
             LobbyControl.Log.LogDebug(string.Join("\n", injector.ReleaseInstructions()));
             return codes;
         }
