@@ -24,8 +24,6 @@ namespace LobbyControl.Patches;
 [HarmonyPatch]
 internal class JoinQueuePatches
 {
-    private static bool _allowNewConnection;
-
     private static bool _checkpointsInitialized;
     private static ConnectionCheckpoint _syncAlreadyHeldObjectsCheckpoint;
     private static ConnectionCheckpoint _sendNewPlayerValuesCheckpoint;
@@ -53,44 +51,7 @@ internal class JoinQueuePatches
             ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SendNewPlayerValues");
     }
 
-    //-----------------------ALLOW LATE JOINS----------------------------
-
-    //Do not check for gameHasStarted.
-    [HarmonyTranspiler]
-    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
-    private static IEnumerable<CodeInstruction> FixConnectionApprovalPrefix(
-        IEnumerable<CodeInstruction> instructions)
-    {
-        var codes = instructions.ToList();
-        //   }
-        // - else if (GameNetworkManager.Instance.gameHasStarted)
-        // - {
-        // -     response.Reason = "Game has already started!";
-        // -     flag = false;
-        // - }
-        //   else if (GameNetworkManager.Instance.gameVersionNum.ToString() != strArray[0])
-        var injector = new ILInjector(codes)
-            .Find([
-                ILMatcher.Call(typeof(GameNetworkManager).GetProperty(nameof(GameNetworkManager.Instance))?.GetMethod),
-                ILMatcher.Ldfld(typeof(GameNetworkManager).GetField(nameof(GameNetworkManager.gameHasStarted),
-                    BindingFlags.Instance | BindingFlags.Public)),
-                ILMatcher.Opcode(OpCodes.Brfalse).CaptureOperandAs(out Label gameHasStartedLabel),
-            ]);
-
-        if (!injector.IsValid)
-        {
-            // print error
-            LobbyControl.Log.LogWarning("ConnectionApproval patch failed!!");
-            LobbyControl.Log.LogDebug(string.Join("\n", injector.ReleaseInstructions()));
-            return codes;
-        }
-
-        return injector
-            .RemoveLastMatch()
-            .FindLabel(gameHasStartedLabel)
-            .RemoveLastMatch()
-            .ReleaseInstructions();
-    }
+    //--------------------JOIN QUEUE LOGIC----------------------------
 
     [HarmonyFinalizer]
     [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
@@ -106,31 +67,6 @@ internal class JoinQueuePatches
 
         if (!response.Approved)
             return null;
-
-        //if we're already landing
-        if (!_allowNewConnection)
-        {
-            LobbyControl.Log.LogDebug("connection refused ( ship was landed ).");
-            response.Reason = "Ship has already landed!";
-            response.Approved = false;
-            return null;
-        }
-
-        //if lobby is closed
-        if (!__instance.disableSteam &&
-            (!__instance.currentLobby.HasValue || !LobbyPatcher.IsOpen(__instance.currentLobby.Value)))
-        {
-            LobbyControl.Log.LogDebug("connection refused ( lobby was closed ).");
-            response.Reason = "Lobby has been closed!";
-            response.Approved = false;
-            return null;
-        }
-
-        //log late joins
-        if (__instance.gameHasStarted)
-        {
-            LobbyControl.Log.LogDebug("Incoming late connection.");
-        }
 
         if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
             return null;
@@ -165,8 +101,6 @@ internal class JoinQueuePatches
         LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{ConnectionQueue.Count}");
         return null;
     }
-
-    //--------------------JOIN QUEUE LOGIC----------------------------
 
     private static readonly
         ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
@@ -449,7 +383,7 @@ internal class JoinQueuePatches
             }
 
             //if we can let new connections in
-            if (_allowNewConnection)
+            if (LateJoinPatches._allowNewConnection)
             {
                 //wait until the delay between connections
                 if (ConnectionEvents.ConnectingClientId.HasValue || ConnectionTimer.Enabled)
@@ -637,7 +571,7 @@ internal class JoinQueuePatches
             return;
         }
 
-        _allowNewConnection = false;
+        LateJoinPatches._allowNewConnection = false;
 
         orig(@this);
     }
@@ -654,6 +588,6 @@ internal class JoinQueuePatches
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.Start))]
     private static void OnReadyToLand()
     {
-        _allowNewConnection = true;
+        LateJoinPatches._allowNewConnection = true;
     }
 }

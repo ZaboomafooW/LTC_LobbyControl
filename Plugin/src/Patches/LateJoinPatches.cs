@@ -1,5 +1,11 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using LobbyControl.Utils;
+using LobbyControl.Utils.IL;
+using Unity.Netcode;
 using Object = UnityEngine.Object;
 
 namespace LobbyControl.Patches;
@@ -7,9 +13,86 @@ namespace LobbyControl.Patches;
 [HarmonyPatch]
 internal class LateJoinPatches
 {
-    ///
-    /// ALSO <see cref="JoinQueuePatches"/>
-    ///
+    public static bool _allowNewConnection;
+
+    /// <summary>
+    /// Do not check for gameHasStarted.
+    /// </summary>
+    [HarmonyTranspiler]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
+    private static IEnumerable<CodeInstruction> FixConnectionApprovalPrefix(
+        IEnumerable<CodeInstruction> instructions)
+    {
+        var codes = instructions.ToList();
+        //   }
+        // - else if (GameNetworkManager.Instance.gameHasStarted)
+        // - {
+        // -     response.Reason = "Game has already started!";
+        // -     flag = false;
+        // - }
+        //   else if (GameNetworkManager.Instance.gameVersionNum.ToString() != strArray[0])
+        var injector = new ILInjector(codes)
+            .Find([
+                ILMatcher.Call(typeof(GameNetworkManager).GetProperty(nameof(GameNetworkManager.Instance))?.GetMethod),
+                ILMatcher.Ldfld(typeof(GameNetworkManager).GetField(nameof(GameNetworkManager.gameHasStarted),
+                    BindingFlags.Instance | BindingFlags.Public)),
+                ILMatcher.Opcode(OpCodes.Brfalse).CaptureOperandAs(out Label gameHasStartedLabel),
+            ]);
+
+        if (!injector.IsValid)
+        {
+            // print error
+            LobbyControl.Log.LogWarning("ConnectionApproval patch failed!!");
+            LobbyControl.Log.LogDebug(string.Join("\n", injector.ReleaseInstructions()));
+            return codes;
+        }
+
+        return injector
+            .RemoveLastMatch()
+            .FindLabel(gameHasStartedLabel)
+            .RemoveLastMatch()
+            .ReleaseInstructions();
+    }
+
+    /// <summary>
+    /// Handle late join requests
+    /// </summary>
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
+    private static void HandleLateJoin(
+        GameNetworkManager __instance,
+        NetworkManager.ConnectionApprovalRequest request,
+        NetworkManager.ConnectionApprovalResponse response)
+    {
+        if (!response.Approved)
+            return;
+
+        //if we're already landing
+        if (!_allowNewConnection)
+        {
+            LobbyControl.Log.LogDebug("connection refused ( ship was landed ).");
+            response.Reason = "Ship has already landed!";
+            response.Approved = false;
+            return;
+        }
+
+        //if lobby is closed
+        if (!__instance.disableSteam &&
+            (!__instance.currentLobby.HasValue || !LobbyPatcher.IsOpen(__instance.currentLobby.Value)))
+        {
+            LobbyControl.Log.LogDebug("connection refused ( lobby was closed ).");
+            response.Reason = "Lobby has been closed!";
+            response.Approved = false;
+            return;
+        }
+
+        //log late joins
+        if (__instance.gameHasStarted)
+        {
+            LobbyControl.Log.LogDebug("Incoming late connection.");
+        }
+    }
+
     /// <summary>
     ///     Make the friend invite button work again once we open the lobby.
     /// </summary>

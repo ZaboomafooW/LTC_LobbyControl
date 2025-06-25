@@ -1,4 +1,9 @@
 ## v2.5.9
+
+- minor backend changes:
+  - split ConnectionQueue and LataJoin patch into finalizer and postfix
+
+## v2.5.8
 - 2nd v70 rebuild
 
 ## v2.5.7
