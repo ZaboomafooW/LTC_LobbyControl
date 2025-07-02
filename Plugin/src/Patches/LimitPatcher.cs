@@ -16,7 +16,7 @@ internal class LimitPatcher
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.SyncShipUnlockablesClientRpc))]
     private static IEnumerable<CodeInstruction> PacketSizePatch(IEnumerable<CodeInstruction> instructions)
     {
-        if (!LobbyControl.PluginConfig.SaveLimit.Enabled.Value)
+        if (!PluginConfig.SaveLimit.Enabled.Value)
             return instructions;
 
         var codes = instructions.ToList();
@@ -63,7 +63,7 @@ internal class LimitPatcher
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.SyncShipUnlockablesServerRpc))]
     private static IEnumerable<CodeInstruction> SyncUnlockablesPatch(IEnumerable<CodeInstruction> instructions)
     {
-        if (!LobbyControl.PluginConfig.SaveLimit.Enabled.Value)
+        if (!PluginConfig.SaveLimit.Enabled.Value)
             return instructions;
 
         var codes = instructions.ToList();
@@ -104,7 +104,7 @@ internal class LimitPatcher
     [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.SaveItemsInShip))]
     private static IEnumerable<CodeInstruction> SaveItemsInShipPatch(IEnumerable<CodeInstruction> instructions)
     {
-        if (!LobbyControl.PluginConfig.SaveLimit.Enabled.Value)
+        if (!PluginConfig.SaveLimit.Enabled.Value)
             return instructions;
 
         var codes = instructions.ToList();

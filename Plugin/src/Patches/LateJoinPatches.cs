@@ -171,7 +171,7 @@ internal class LateJoinPatches
 
         LobbyControl.CanModifyLobby = true;
 
-        if (LobbyControl.PluginConfig.SteamLobby.AutoLobby.Value)
+        if (PluginConfig.SteamLobby.AutoLobby.Value)
         {
             // Restore the friend invite button in the ESC menu.
             Object.FindObjectOfType<QuickMenuManager>().inviteFriendsTextAlpha.alpha = 1f;

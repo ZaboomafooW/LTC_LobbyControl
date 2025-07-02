@@ -34,6 +34,6 @@ internal class NetworkManagerPatch
     public static void SetClientTimeout(NetworkManager __instance)
     {
         __instance.NetworkConfig.ClientConnectionBufferTimeout =
-            LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value / 1000 * 4;
+            PluginConfig.JoinQueue.ConnectionTimeout.Value / 1000 * 4;
     }
 }

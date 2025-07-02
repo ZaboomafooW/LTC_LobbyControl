@@ -24,93 +24,6 @@ namespace LobbyControl.Patches;
 [HarmonyPatch]
 internal class JoinQueuePatches
 {
-    private static bool _checkpointsInitialized;
-    private static ConnectionCheckpoint _syncAlreadyHeldObjectsCheckpoint;
-    private static ConnectionCheckpoint _sendNewPlayerValuesCheckpoint;
-    private static ConnectionCheckpoint _syncAllPlayerLevelsCheckpoint;
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Awake))]
-    private static void OnStartup(GameNetworkManager __instance)
-    {
-        if (_checkpointsInitialized)
-            return;
-
-        _checkpointsInitialized = true;
-
-        _syncAlreadyHeldObjectsCheckpoint =
-            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAlreadyHeldObjects");
-
-        _syncAllPlayerLevelsCheckpoint =
-            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAllPlayerLevels");
-
-        if (__instance.disableSteam)
-            return;
-
-        _sendNewPlayerValuesCheckpoint =
-            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SendNewPlayerValues");
-    }
-
-    //--------------------JOIN QUEUE LOGIC----------------------------
-
-    [HarmonyFinalizer]
-    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
-    [HarmonyPriority(10)]
-    private static Exception ThrottleApprovals(
-        GameNetworkManager __instance,
-        NetworkManager.ConnectionApprovalRequest request,
-        NetworkManager.ConnectionApprovalResponse response,
-        Exception __exception)
-    {
-        if (__exception != null)
-            return __exception;
-
-        if (!response.Approved)
-            return null;
-
-        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
-            return null;
-
-        response.Pending = true;
-
-        var array = Encoding.ASCII.GetString(request.Payload).Split(",");
-
-        ulong? friendId = null;
-
-        if (!__instance.disableSteam && array.Length > 1 && ulong.TryParse(array[1], out var steamID))
-        {
-            friendId = steamID;
-            Task.Run(() => SteamFriends.RequestUserInformation(steamID));
-
-            if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
-            {
-                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
-                    $"Player {new Friend(steamID).Name}({request.ClientNetworkId}) requested a connection"));
-            }
-        }
-        else
-        {
-            if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
-            {
-                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
-                    $"Client {request.ClientNetworkId} requested a connection"));
-            }
-        }
-
-        ConnectionQueue.Enqueue((request, response, friendId));
-        LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{ConnectionQueue.Count}");
-        return null;
-    }
-
-    private static readonly
-        ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
-            response, ulong? steamId)> ConnectionQueue = new();
-
-    private static readonly Timer ConnectionTimer = new()
-    {
-        AutoReset = false
-    };
-
     internal static void Init()
     {
         var methodInfo =
@@ -172,9 +85,125 @@ internal class JoinQueuePatches
             LobbyControl.Log.LogFatal("Cannot apply patch to StartGame");
     }
 
+    private static bool _checkpointsInitialized;
+    private static ConnectionCheckpoint _syncAlreadyHeldObjectsCheckpoint;
+    private static ConnectionCheckpoint _sendNewPlayerValuesCheckpoint;
+    private static ConnectionCheckpoint _syncAllPlayerLevelsCheckpoint;
+
+    private static readonly
+        ConcurrentQueue<(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse
+            response, ulong? steamId)> ConnectionQueue = new();
+
+    private static int QueuedClients => ConnectionQueue.Count + (ConnectionEvents.ConnectingClientId.HasValue ? 1 : 0);
+
+    private static readonly Timer ConnectionTimer = new()
+    {
+        AutoReset = false
+    };
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Awake))]
+    private static void OnStartup(GameNetworkManager __instance)
+    {
+        if (_checkpointsInitialized)
+            return;
+
+        _checkpointsInitialized = true;
+
+        _syncAlreadyHeldObjectsCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAlreadyHeldObjects");
+
+        _syncAllPlayerLevelsCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SyncAllPlayerLevels");
+
+        if (__instance.disableSteam)
+            return;
+
+        _sendNewPlayerValuesCheckpoint =
+            ConnectionCheckpoint.RegisterCheckpoint(LobbyControl.Instance, "SendNewPlayerValues");
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.ConnectionApproval))]
+    [HarmonyPriority(10)]
+    private static Exception ThrottleApprovals(
+        GameNetworkManager __instance,
+        NetworkManager.ConnectionApprovalRequest request,
+        NetworkManager.ConnectionApprovalResponse response,
+        Exception __exception)
+    {
+        if (__exception != null)
+            return __exception;
+
+        if (!PluginConfig.JoinQueue.Enabled.Value)
+            return null;
+
+        var maxQueueSize = PluginConfig.JoinQueue.MaxSize.Value;
+        if (maxQueueSize > 0 && QueuedClients >= maxQueueSize)
+        {
+            LobbyControl.Log.LogWarning($"Connection refused, Queue full! count:{QueuedClients}");
+            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+            {
+                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection refused",
+                    $"Client {request.ClientNetworkId} requested a connection but queue was full!"));
+            }
+
+            var message = new StringBuilder();
+
+            if (maxQueueSize == 1)
+            {
+                message.Append("Another player is connecting\n");
+            }
+            else
+            {
+                message.Append("Join Queue is Full !\n");
+                message.AppendFormat("Queued connections: {0}\n", QueuedClients);
+            }
+
+            message.Append("Please Wait a bit before retrying");
+
+            response.Approved = false;
+            response.Reason = message.ToString();
+        }
+
+        if (!response.Approved)
+            return null;
+
+        response.Pending = true;
+
+        var array = Encoding.ASCII.GetString(request.Payload).Split(",");
+
+        ulong? friendId = null;
+
+        if (!__instance.disableSteam && array.Length > 1 && ulong.TryParse(array[1], out var steamID))
+        {
+            friendId = steamID;
+            Task.Run(() => SteamFriends.RequestUserInformation(steamID));
+
+            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+            {
+                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                    $"Player {new Friend(steamID).Name}({request.ClientNetworkId}) requested a connection"));
+            }
+        }
+        else
+        {
+            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+            {
+                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                    $"Client {request.ClientNetworkId} requested a connection"));
+            }
+        }
+
+        ConnectionQueue.Enqueue((request, response, friendId));
+        LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{QueuedClients}");
+        return null;
+    }
+
+
     private static void OnConnectionCompletedServer(ulong clientId)
     {
-        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (!PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         //notify other players to reset the object variables
@@ -192,7 +221,7 @@ internal class JoinQueuePatches
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnClientConnect))]
     private static void OnClientConnect(StartOfRound __instance, ulong clientId)
     {
-        if (!__instance.IsServer || !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (!__instance.IsServer || !PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         if (ConnectionEvents.ConnectingClientId != clientId)
@@ -202,7 +231,7 @@ internal class JoinQueuePatches
         {
             //reset timeout to be a bit more lenient
             ConnectionTimer.Stop();
-            ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+            ConnectionTimer.Interval = PluginConfig.JoinQueue.ConnectionTimeout.Value;
             ConnectionTimer.Start();
         }
     }
@@ -222,7 +251,7 @@ internal class JoinQueuePatches
         if (!__instance.IsServer)
             return;
 
-        if (LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         //fallback event to when vanilla adds the playerIndex to StartOfRound.Instance.ClientPlayerList
@@ -318,7 +347,7 @@ internal class JoinQueuePatches
         try
         {
             //check if current connection reached all checkpoints!
-            if (ConnectionEvents.HasCompletedAllCheckpoints && ConnectionEvents.ConnectingClientId != null)
+            if (ConnectionEvents.HasCompletedAllCheckpoints && ConnectionEvents.ConnectingClientId.HasValue)
             {
                 var clientId = ConnectionEvents.ConnectingClientId.Value;
 
@@ -327,7 +356,7 @@ internal class JoinQueuePatches
                 ConnectionEvents.ConnectingSteamId = null;
 
                 ConnectionTimer.Stop();
-                ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionDelay.Value;
+                ConnectionTimer.Interval = PluginConfig.JoinQueue.ConnectionDelay.Value;
                 ConnectionTimer.Start();
 
                 LobbyControl.Log.LogWarning($"{clientId} completed the connection");
@@ -353,7 +382,7 @@ internal class JoinQueuePatches
                     LobbyControl.Log.LogWarning(
                         $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
 
-                    if (LobbyControl.PluginConfig.JoinQueue.TimeoutPopup.Value)
+                    if (PluginConfig.JoinQueue.TimeoutPopup.Value)
                         if (steamId.HasValue)
                             HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection Timeout",
                                 $"Player {new Friend(steamId.Value).Name}({clientId})\nCheckpoints before the timeout"));
@@ -400,15 +429,15 @@ internal class JoinQueuePatches
                     return;
 
                 //if the queue has been disabled approve all the connections w/o waiting
-                if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+                if (!PluginConfig.JoinQueue.Enabled.Value)
                     return;
 
                 ConnectionEvents.ConnectingClientId = entry.request.ClientNetworkId;
                 ConnectionEvents.ConnectingSteamId = entry.steamId;
-                ConnectionTimer.Interval = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+                ConnectionTimer.Interval = PluginConfig.JoinQueue.ConnectionTimeout.Value;
                 ConnectionTimer.Start();
 
-                if (LobbyControl.PluginConfig.JoinQueue.ConnectionPopup.Value)
+                if (PluginConfig.JoinQueue.ConnectionPopup.Value)
                     if (entry.steamId.HasValue)
                         HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection resumed",
                             $"Player {new Friend(entry.steamId.Value).Name}({entry.request.ClientNetworkId}) is now connecting"));
@@ -456,8 +485,8 @@ internal class JoinQueuePatches
             entry.response.Pending = false;
         }
     }
-    //-----------HOST TIMEOUT DETECTION--------------
 
+    //-----------HOST TIMEOUT DETECTION--------------
 
     private static readonly Stopwatch ConnectionStopwatch = new();
 
@@ -468,7 +497,7 @@ internal class JoinQueuePatches
         if (!NetworkManager.Singleton.IsServer)
             return;
 
-        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (!PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         ConnectionStopwatch.Restart();
@@ -509,13 +538,13 @@ internal class JoinQueuePatches
         if (!NetworkManager.Singleton.IsServer)
             return;
 
-        if (!LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (!PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         ConnectionStopwatch.Stop();
 
         var elapsed = ConnectionStopwatch.ElapsedMilliseconds;
-        var currentTimeout = LobbyControl.PluginConfig.JoinQueue.ConnectionTimeout.Value;
+        var currentTimeout = PluginConfig.JoinQueue.ConnectionTimeout.Value;
 
         LobbyControl.Log.LogDebug($"Lobby took {elapsed}ms to load");
 
@@ -532,13 +561,9 @@ internal class JoinQueuePatches
 
     //--------------HANDLE SHIP LEVER----------------
 
-    // ReSharper disable once ConvertToConstant.Local
-    // ReSharper disable once FieldCanBeMadeReadOnly.Local
-    private static bool _testValue = false;
-
     private static bool CanStartGame()
     {
-        return !ConnectionEvents.ConnectingClientId.HasValue && ConnectionQueue.IsEmpty && !_testValue;
+        return !ConnectionEvents.ConnectingClientId.HasValue && ConnectionQueue.IsEmpty;
     }
 
     private static void CheckValidStart(Action<StartOfRound> orig, StartOfRound @this)

@@ -1,5 +1,7 @@
-## v2.5.9
+## v2.5.10
+- limit ConnectionQueue size to try and combat sending players in the "fog" on timeout
 
+## v2.5.9
 - minor backend changes:
   - split ConnectionQueue and LataJoin patch into finalizer and postfix
 

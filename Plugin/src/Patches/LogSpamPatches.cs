@@ -12,8 +12,8 @@ internal class LogSpamPatches
         [HarmonyPatch(nameof(EnemyAI.SetDestinationToPosition))]
         private static bool StopIfDead1(EnemyAI __instance)
         {
-            if (!LobbyControl.PluginConfig.LogSpam.Enabled.Value ||
-                !LobbyControl.PluginConfig.LogSpam.CalculatePolygonPath.Value)
+            if (!PluginConfig.LogSpam.Enabled.Value ||
+                !PluginConfig.LogSpam.CalculatePolygonPath.Value)
                 return true;
 
             return !__instance.isEnemyDead;
@@ -23,8 +23,8 @@ internal class LogSpamPatches
         [HarmonyPatch(nameof(EnemyAI.DoAIInterval))]
         private static void StopIfDead2(EnemyAI __instance)
         {
-            if (!LobbyControl.PluginConfig.LogSpam.Enabled.Value ||
-                !LobbyControl.PluginConfig.LogSpam.CalculatePolygonPath.Value)
+            if (!PluginConfig.LogSpam.Enabled.Value ||
+                !PluginConfig.LogSpam.CalculatePolygonPath.Value)
                 return;
             if (!__instance.isEnemyDead)
                 return;
@@ -36,8 +36,8 @@ internal class LogSpamPatches
         [HarmonyPatch(nameof(EnemyAI.PathIsIntersectedByLineOfSight))]
         private static bool StopIfDead3(EnemyAI __instance)
         {
-            if (!LobbyControl.PluginConfig.LogSpam.Enabled.Value ||
-                !LobbyControl.PluginConfig.LogSpam.CalculatePolygonPath.Value)
+            if (!PluginConfig.LogSpam.Enabled.Value ||
+                !PluginConfig.LogSpam.CalculatePolygonPath.Value)
                 return true;
 
             return !__instance.isEnemyDead;

@@ -31,8 +31,8 @@ internal static class NamedMessages
         if (!NetworkManager.Singleton.IsServer)
             return;
 
-        if (!LobbyControl.PluginConfig.Networking.Enabled.Value ||
-            !LobbyControl.PluginConfig.Networking.SyncRadarNames.Value)
+        if (!PluginConfig.Networking.Enabled.Value ||
+            !PluginConfig.Networking.SyncRadarNames.Value)
             return;
 
         var buffer = new FastBufferWriter(0, Allocator.Temp);
@@ -49,8 +49,8 @@ internal static class NamedMessages
         if (senderId != NetworkManager.ServerClientId)
             return;
 
-        if (!LobbyControl.PluginConfig.Networking.Enabled.Value ||
-            !LobbyControl.PluginConfig.Networking.SyncRadarNames.Value)
+        if (!PluginConfig.Networking.Enabled.Value ||
+            !PluginConfig.Networking.SyncRadarNames.Value)
             return;
 
         if (!StartOfRound.Instance || !StartOfRound.Instance.localPlayerController || !StartOfRound.Instance.mapScreen)
@@ -67,8 +67,8 @@ internal static class NamedMessages
         if (!NetworkManager.Singleton.IsServer)
             return;
 
-        if (!LobbyControl.PluginConfig.Networking.Enabled.Value ||
-            !LobbyControl.PluginConfig.Networking.ResetPlayerValues.Value)
+        if (!PluginConfig.Networking.Enabled.Value ||
+            !PluginConfig.Networking.ResetPlayerValues.Value)
             return;
 
         var buffer = new FastBufferWriter(sizeof(int), Allocator.Temp);
@@ -86,8 +86,8 @@ internal static class NamedMessages
         if (senderId != NetworkManager.ServerClientId)
             return;
 
-        if (!LobbyControl.PluginConfig.Networking.Enabled.Value ||
-            !LobbyControl.PluginConfig.Networking.ResetPlayerValues.Value)
+        if (!PluginConfig.Networking.Enabled.Value ||
+            !PluginConfig.Networking.ResetPlayerValues.Value)
             return;
 
         if (!GameNetworkManager.Instance || !GameNetworkManager.Instance.localPlayerController)

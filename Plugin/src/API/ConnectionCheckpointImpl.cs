@@ -37,7 +37,7 @@ public partial class ConnectionCheckpoint : IDisposable
         if (IsDisposed)
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
 
-        if (ConnectionEvents._connectingClientId is null && !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (ConnectionEvents._connectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
         if (ConnectionEvents._connectingClientId != clientId)
@@ -60,7 +60,7 @@ public partial class ConnectionCheckpoint : IDisposable
         if (IsDisposed)
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
 
-        if (ConnectionEvents._connectingClientId is null && !LobbyControl.PluginConfig.JoinQueue.Enabled.Value)
+        if (ConnectionEvents._connectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
         if (ConnectionEvents._connectingClientId != clientId)
