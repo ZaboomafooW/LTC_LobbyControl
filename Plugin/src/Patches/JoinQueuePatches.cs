@@ -100,6 +100,26 @@ internal class JoinQueuePatches
     {
         AutoReset = false
     };
+    
+    internal static ConcurrentDictionary<ulong, bool> DroppedConnections = new();
+
+    private static void ForcefullyDisconnectClient(ulong clientId)
+    {
+        if (clientId == NetworkManager.Singleton.LocalClientId)
+            return;
+        
+        DroppedConnections[clientId] = true;
+        
+        try
+        {
+            //Forcefully close the connection
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport.DisconnectRemoteClient(clientId);
+        }
+        catch (Exception ex)
+        {
+            LobbyControl.Log.LogError(ex);
+        }
+    }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.Awake))]
@@ -221,7 +241,18 @@ internal class JoinQueuePatches
     [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.OnClientConnect))]
     private static void OnClientConnect(StartOfRound __instance, ulong clientId)
     {
-        if (!__instance.IsServer || !PluginConfig.JoinQueue.Enabled.Value)
+        if (!__instance.IsServer)
+            return;
+
+        if (DroppedConnections.ContainsKey(clientId))
+        {
+            LobbyControl.Log.LogWarning(
+                $"Dropped client {clientId} reconnected again, Terminating the connection!");
+            ForcefullyDisconnectClient(clientId);
+            return;
+        }
+        
+        if (!PluginConfig.JoinQueue.Enabled.Value)
             return;
 
         if (ConnectionEvents.ConnectingClientId != clientId)
@@ -381,6 +412,7 @@ internal class JoinQueuePatches
 
                     LobbyControl.Log.LogWarning(
                         $"missing checkpoints for {clientId}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
+                    
 
                     if (PluginConfig.JoinQueue.TimeoutPopup.Value)
                         if (steamId.HasValue)
@@ -391,19 +423,13 @@ internal class JoinQueuePatches
                                 $"Client {clientId} missed {missing.Length}\nCheckpoints before the timeout"));
 
                     HUDManager.Instance.StartCoroutine(HudUtils.ShowTipAfterDelay("Connection Timeout",
-                        "If clients frequently fail to connect maybe consider increasing \"connection_timeout_ms\" in config",
-                        2, "LCTip_LCTimeout"));
-
+                        "If clients frequently fail to connect maybe consider increasing \"connection_timeout_ms\" in LobbyControl config",
+                        5, "LCTip_LCTimeout"));
+                    
                     LobbyControl.Log.LogError(
                         $"Connection to {clientId} expired, Disconnecting!");
-                    try
-                    {
-                        NetworkManager.Singleton.DisconnectClient(clientId);
-                    }
-                    catch (Exception ex)
-                    {
-                        LobbyControl.Log.LogError(ex);
-                    }
+                    
+                    ForcefullyDisconnectClient(clientId);
                 }
 
                 //allow the connection of the next client

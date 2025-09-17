@@ -30,7 +30,7 @@ internal static class PluginConfig
             , "handle joining players as a queue instead of at the same time");
         JoinQueue.MaxSize = config.Bind("JoinQueue", "max_size", 3
             , new ConfigDescription("max number of players in queue ( if queue is full extra connections will be refused )", new AcceptableValueRange<int>(-1, 10)));
-        JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 20000
+        JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 40000
             , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(10000, int.MaxValue)));
         JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
             , new ConfigDescription("Delay between each successful connection", new AcceptableValueRange<int>(100, int.MaxValue)));

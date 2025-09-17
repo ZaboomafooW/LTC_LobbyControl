@@ -15,6 +15,7 @@ internal class NetworkManagerPatch
         LobbyControl.Log.LogInfo("Registering Named Messages!");
         NamedMessages.RegisterNamedMessages();
         ConnectionEvents.RegisterNamedMessages();
+        JoinQueuePatches.DroppedConnections.Clear();
     }
 
     [HarmonyPostfix]
@@ -23,7 +24,7 @@ internal class NetworkManagerPatch
     {
         if (NetworkManager.Singleton == null || NetworkManager.Singleton.CustomMessagingManager == null)
             return;
-
+        
         LobbyControl.Log.LogInfo("Unregistering Named Messages!");
         NamedMessages.UnregisterNamedMessages();
         ConnectionEvents.UnregisterNamedMessages();

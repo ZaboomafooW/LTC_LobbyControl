@@ -5,12 +5,14 @@ namespace LobbyControl.Utils;
 
 public static class HudUtils
 {
+    private static readonly WaitUntil WaitForAnimation = new (() => HUDManager.Instance.tipsPanelAnimator.GetCurrentAnimatorStateInfo(0).normalizedTime >= 1);
+    
     internal static IEnumerator ShowMessageAfterDelay(string title, string text, float delay = 0f,
         bool isWarning = false)
     {
         if (delay > 0f)
             yield return new WaitForSeconds(delay);
-        yield return new WaitUntil(() => HUDManager.Instance.CanTipDisplay(isWarning, false, null));
+        yield return WaitForAnimation;
         HUDManager.Instance.DisplayTip(title, text, isWarning);
     }
 
@@ -18,7 +20,7 @@ public static class HudUtils
     {
         if (delay > 0f)
             yield return new WaitForSeconds(delay);
-        yield return new WaitUntil(() => HUDManager.Instance.CanTipDisplay(false, false, null));
+        yield return WaitForAnimation;
         HUDManager.Instance.DisplayTip(title, text, false, true, saveKey);
     }
 }

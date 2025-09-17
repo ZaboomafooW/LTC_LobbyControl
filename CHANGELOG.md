@@ -1,3 +1,8 @@
+## v2.5.11
+- forcefully close client socket instead of using NGO API to request a disconnection
+- increase default connection_timeout_ms to 40s
+- change Tip coroutine to wait for HUDManager animator instead of relying on the Vanilla method
+
 ## v2.5.10
 - limit ConnectionQueue size to try and combat sending players in the "fog" on timeout
 
