@@ -1,11 +1,12 @@
 using System;
+using Steamworks;
 
 namespace LobbyControl.API;
 
 public static partial class ConnectionEvents
 {
-    public static partial ulong? ConnectingClientId { get; internal set; }
-    public static ulong? ConnectingSteamId { get; internal set; }
+    public static partial ulong? ConnectingClientId { get; }
+    public static partial SteamId? ConnectingSteamId { get; }
     public static partial ConnectionCheckpoint[] MissingCheckpoints { get; }
 
     //---------------------EVENTS------------------------

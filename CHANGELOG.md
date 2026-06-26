@@ -1,3 +1,8 @@
+## v2.5.12
+- Add queue handling for Lobby command status.
+- Refactor connection queue to improve client management for late joins.
+- Enhance client approval handling by introducing queue position tracking.
+
 ## v2.5.11
 - forcefully close client socket instead of using NGO API to request a disconnection
 - increase default connection_timeout_ms to 40s

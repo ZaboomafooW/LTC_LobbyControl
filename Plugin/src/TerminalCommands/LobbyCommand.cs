@@ -260,39 +260,71 @@ Extra:
 
     private static bool StatusCommand(ref TerminalNode node, string[] args)
     {
-        var manager = GameNetworkManager.Instance;
+        StringBuilder builder;
 
-        var status = false;
-        string visibility;
-        var name = manager.steamLobbyName;
+        if (args.Length > 2 && args[2].ToLower().Equals("queue"))
+        {
+            builder = new StringBuilder("Lobby Queue Status:");
+            if (JoinQueuePatches.ConnectingClient != null)
+            {
+                builder.Append("\n┬ Connecting client is '").Append(JoinQueuePatches.ConnectingClient.Name).Append("'");
+                builder.Append("\n└ Remaining time: ").Append(JoinQueuePatches.ConnectionTimer.Remaining.TotalMilliseconds).Append(" ms");
+            }
+            else
+                builder.Append("\n─ No client is currently connecting");
 
-        if (manager.disableSteam)
-        {
-            UnityTransport unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-            visibility = (unityTransport.ConnectionData.ServerListenAddress == "0.0.0.0") ? "Public" : "Private";
-        }
-        else if (!manager.currentLobby.HasValue)
-        {
-            node.displayText = "Failed to fetch lobby ( was null )\n\n";
-            return false;
+            builder.Append("\n┬ Queued clients: ").Append(JoinQueuePatches.ConnectionQueue.Count);
+
+            foreach (var client in JoinQueuePatches.ConnectionQueue.Take(7))
+            {
+                builder.Append("\n├ ").Append(client.Name);
+            }
+
+            builder.Append("\n└ [...]");
         }
         else
         {
-            var lobby = manager.currentLobby.Value;
-            status = LobbyPatcher.IsOpen(lobby);
-            visibility = LobbyPatcher.GetVisibility(lobby).ToString();
-            name = lobby.GetData("name");
+            var manager = GameNetworkManager.Instance;
+
+            var status = false;
+            string visibility;
+            var name = manager.steamLobbyName;
+
+            if (manager.disableSteam)
+            {
+                UnityTransport unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+                visibility = (unityTransport.ConnectionData.ServerListenAddress == "0.0.0.0") ? "Public" : "Private";
+            }
+            else if (!manager.currentLobby.HasValue)
+            {
+                node.displayText = "Failed to fetch lobby ( was null )\n\n";
+                return false;
+            }
+            else
+            {
+                var lobby = manager.currentLobby.Value;
+                status = LobbyPatcher.IsOpen(lobby);
+                visibility = LobbyPatcher.GetVisibility(lobby).ToString();
+                name = lobby.GetData("name");
+            }
+
+            var autoSave = LobbyControl.CanSave;
+
+            builder = new StringBuilder("Lobby Status:");
+            builder.Append("\n- File is '").Append(manager.currentSaveFileName).Append("'");
+            builder.Append("\n- Name is '").Append(name).Append("'");
+            if (!manager.disableSteam)
+                builder.Append("\n- Status is ").Append(status ? "Open" : "Closed");
+            builder.Append("\n- Visibility is ").Append(visibility);
+            builder.Append("\n- Saving is ").Append(autoSave ? "Automatic" : "Manual");
+            if (PluginConfig.JoinQueue.Enabled.Value)
+            {
+                builder.Append("\n");
+                builder.Append("\n- ").Append(JoinQueuePatches.QueuedClients).Append(" Players are waiting in queue");
+                builder.Append("\n Type 'lobby status queue' for more details");
+            }
+
         }
-
-        var autoSave = LobbyControl.CanSave;
-
-        var builder = new StringBuilder("Lobby Status:");
-        builder.Append("\n- File is '").Append(manager.currentSaveFileName).Append("'");
-        builder.Append("\n- Name is '").Append(name).Append("'");
-        if (!manager.disableSteam)
-            builder.Append("\n- Status is ").Append(status ? "Open" : "Closed");
-        builder.Append("\n- Visibility is ").Append(visibility);
-        builder.Append("\n- Saving is ").Append(autoSave ? "Automatic" : "Manual");
         builder.Append("\n\n");
         node.displayText = builder.ToString();
         node.maxCharactersToType = node.displayText.Length + 2;
@@ -610,7 +642,7 @@ Extra:
 
         foreach (var playerScript in StartOfRound.Instance.allPlayerScripts)
         {
-            playerScript.DropAllHeldItemsAndSync();
+            playerScript.DropAllHeldItemsAndSyncNonexact();
         }
 
         node.displayText = outText + "\n\n";

@@ -29,15 +29,15 @@ internal static class PluginConfig
         JoinQueue.Enabled = config.Bind("JoinQueue", "enabled", true
             , "handle joining players as a queue instead of at the same time");
         JoinQueue.MaxSize = config.Bind("JoinQueue", "max_size", 3
-            , new ConfigDescription("max number of players in queue ( if queue is full extra connections will be refused )", new AcceptableValueRange<int>(-1, 10)));
+            , new ConfigDescription("max number of players in queue ( if queue is full extra connections will be refused )", new AcceptableValueRange<int>(1, ushort.MaxValue)));
         JoinQueue.ConnectionTimeout = config.Bind("JoinQueue", "connection_timeout_ms", 40000
             , new ConfigDescription("After how much time discard a hanging connection", new AcceptableValueRange<int>(10000, int.MaxValue)));
-        JoinQueue.ConnectionDelay = config.Bind("JoinQueue", "connection_delay_ms", 2000
-            , new ConfigDescription("Delay between each successful connection", new AcceptableValueRange<int>(100, int.MaxValue)));
         JoinQueue.TimeoutPopup = config.Bind("JoinQueue", "timeout_notification", true
             , "show a popup when a client fails to join before the timeout");
         JoinQueue.ConnectionPopup = config.Bind("JoinQueue", "connection_notification", false
             , "show a popup when a client tries to join");
+        JoinQueue.PreLobbyChannel = config.Bind("JoinQueue", "pre-lobby_channel", 28
+            , new ConfigDescription("channel to use for pre-lobby connections", new AcceptableValueRange<int>(1, 255)));
         //Networking
         Networking.Enabled = config.Bind("Networking", "enabled", true
             , "handle extra actions requested by host");
@@ -71,9 +71,9 @@ internal static class PluginConfig
             LethalConfigProxy.AddConfig(JoinQueue.Enabled);
             LethalConfigProxy.AddConfig(JoinQueue.MaxSize);
             LethalConfigProxy.AddConfig(JoinQueue.ConnectionTimeout);
-            LethalConfigProxy.AddConfig(JoinQueue.ConnectionDelay);
             LethalConfigProxy.AddConfig(JoinQueue.TimeoutPopup);
             LethalConfigProxy.AddConfig(JoinQueue.ConnectionPopup);
+            LethalConfigProxy.AddConfig(JoinQueue.PreLobbyChannel);
             //Networking
             LethalConfigProxy.AddConfig(Networking.Enabled);
             LethalConfigProxy.AddConfig(Networking.SyncRadarNames);
@@ -111,11 +111,11 @@ internal static class PluginConfig
     internal static class JoinQueue
     {
         internal static ConfigEntry<bool> Enabled;
-        internal static ConfigEntry<int> MaxSize;
-        internal static ConfigEntry<int> ConnectionTimeout;
-        internal static ConfigEntry<int> ConnectionDelay;
+        internal static ConfigEntry<int>  MaxSize;
+        internal static ConfigEntry<int>  ConnectionTimeout;
         internal static ConfigEntry<bool> TimeoutPopup;
         internal static ConfigEntry<bool> ConnectionPopup;
+        internal static ConfigEntry<int>  PreLobbyChannel;
     }
 
     internal static class Networking

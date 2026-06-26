@@ -15,7 +15,6 @@ internal class NetworkManagerPatch
         LobbyControl.Log.LogInfo("Registering Named Messages!");
         NamedMessages.RegisterNamedMessages();
         ConnectionEvents.RegisterNamedMessages();
-        JoinQueuePatches.DroppedConnections.Clear();
     }
 
     [HarmonyPostfix]

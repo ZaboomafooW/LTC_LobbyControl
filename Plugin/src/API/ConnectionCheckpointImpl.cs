@@ -37,17 +37,17 @@ public partial class ConnectionCheckpoint : IDisposable
         if (IsDisposed)
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
 
-        if (ConnectionEvents._connectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
+        if (ConnectionEvents.ConnectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
-        if (ConnectionEvents._connectingClientId != clientId)
+        if (ConnectionEvents.ConnectingClientId != clientId)
         {
             LobbyControl.Log.LogWarning(
-                $"CompleteCheckpoint ('{Name}' from '{Plugin.Name}') was called for client '{clientId}' but '{ConnectionEvents._connectingClientId}' was expected");
+                $"CompleteCheckpoint ('{Name}' from '{Plugin.Name}') was called for client '{clientId}' but '{ConnectionEvents.ConnectingClientId}' was expected");
             return false;
         }
 
-        ConnectionEvents._currentCheckpoints |= Mask;
+        ConnectionEvents.CurrentCheckpoints |= Mask;
         LobbyControl.Log.LogDebug($"client '{clientId}' completed checkpoint '{Name}' from '{Plugin.Name}'");
 
         ConnectionEvents.RaiseConnectionCheckpointServerEvent(clientId, this);
@@ -60,18 +60,18 @@ public partial class ConnectionCheckpoint : IDisposable
         if (IsDisposed)
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
 
-        if (ConnectionEvents._connectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
+        if (ConnectionEvents.ConnectingClientId is null && !PluginConfig.JoinQueue.Enabled.Value)
             return true;
 
-        if (ConnectionEvents._connectingClientId != clientId)
+        if (ConnectionEvents.ConnectingClientId != clientId)
         {
             LobbyControl.Log.LogWarning(
-                $"ResetCheckpoint ('{Name}' from '{Plugin.Name}') was called for client '{clientId}' but '{ConnectionEvents._connectingClientId}' was expected");
+                $"ResetCheckpoint ('{Name}' from '{Plugin.Name}') was called for client '{clientId}' but '{ConnectionEvents.ConnectingClientId}' was expected");
             return false;
         }
 
         LobbyControl.Log.LogDebug($"'{Plugin.Name}' reset checkpoint '{Name}' for client '{clientId}'");
-        ConnectionEvents._currentCheckpoints &= ~Mask;
+        ConnectionEvents.CurrentCheckpoints &= ~Mask;
 
         return true;
     }
@@ -82,7 +82,7 @@ public partial class ConnectionCheckpoint : IDisposable
             throw new InvalidOperationException($"This {nameof(ConnectionCheckpoint)} has already been disposed");
 
         CheckpointMask &= ~Mask;
-        ConnectionEvents._currentCheckpoints &= ~Mask;
+        ConnectionEvents.CurrentCheckpoints &= ~Mask;
 
         Mask = 0;
     }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using LobbyControl.Patches;
+using Steamworks;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine.Pool;
@@ -10,15 +12,8 @@ public static partial class ConnectionEvents
 {
     //---------------------EVENTS------------------------
 
-    public static partial ulong? ConnectingClientId
-    {
-        get => _connectingClientId;
-        internal set
-        {
-            _currentCheckpoints = 0;
-            _connectingClientId = value;
-        }
-    }
+    public static partial ulong? ConnectingClientId => JoinQueuePatches.ConnectingClient?.ClientId;
+    public static partial SteamId? ConnectingSteamId => JoinQueuePatches.ConnectingClient?.SteamId;
 
     public static partial ConnectionCheckpoint[] MissingCheckpoints
     {
@@ -34,7 +29,7 @@ public static partial class ConnectionEvents
                     if (checkpoint.IsDisposed)
                         continue;
 
-                    if ((_currentCheckpoints & checkpoint.Mask) == 0)
+                    if ((CurrentCheckpoints & checkpoint.Mask) == 0)
                         list.Add(checkpoint);
                 }
 
@@ -129,9 +124,14 @@ public static partial class ConnectionEvents
             LobbyControl.Log.LogError($"Exception while processing ConnectionCompleteClientEvent: {ex}");
         }
     }
+    
+    internal static bool HasCompletedAllCheckpoints => ConnectionCheckpoint.CheckpointMask == CurrentCheckpoints;
+    internal static long MissingCheckpointMask => ~CurrentCheckpoints & ConnectionCheckpoint.CheckpointMask;
+    
+    internal static long CurrentCheckpoints;
 
-    internal static Int64 _currentCheckpoints;
-    internal static ulong? _connectingClientId;
-    internal static bool HasCompletedAllCheckpoints => ConnectionCheckpoint.CheckpointMask == _currentCheckpoints;
-    internal static Int64 MissingCheckpointMask => ~_currentCheckpoints & ConnectionCheckpoint.CheckpointMask;
+    internal static void ResetCheckpoints()
+    {
+        CurrentCheckpoints = 0;
+    }
 }

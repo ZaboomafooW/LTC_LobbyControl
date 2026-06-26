@@ -16,12 +16,8 @@
         <PackageReference Include="BepInEx.Core" Version="5.4.21" Private="False"/>
         <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.1" PrivateAssets="all"/>
 
-        <PackageReference Include="LethalCompany.GameLibs.Steam" Version="*-*" Private="False" Publicize="True"/>
+        <PackageReference Include="LethalCompany.GameLibs.Steam" Version="81.0.5-*" Private="False" Publicize="True"/>
     </ItemGroup>
-
-    <!--    <Target Name="NetcodePatch" AfterTargets="PostBuildEvent">
-        <Exec Command="netcode-patch -nv 1.5.2 &quot;$(TargetPath)&quot; @(ReferencePathWithRefAssemblies->'&quot;%(Identity)&quot;', ' ')"/>
-    </Target>-->
 
     <Target Name="CopyForUpload" AfterTargets="Build">
         <PropertyGroup>

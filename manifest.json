@@ -1,8 +1,9 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "name": "LobbyControl_Experimental",
-  "version_number": "2.5.11",
+  "version_number": "2.5.12",
   "website_url": "https://github.com/mattymatty97/LTC_LobbyControl",
-  "description": "A collection of Patches for Lethal Company with Quality of life changes for the Host.",
+  "description": "A collection of Patches for Lethal Company with Quality of life changes for the Host. ( LateJoin Included )",
   "dependencies": [
     "BepInEx-BepInExPack-5.4.2100"
   ]
