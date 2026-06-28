@@ -48,7 +48,7 @@ public partial class ConnectionCheckpoint : IDisposable
         }
 
         ConnectionEvents.CurrentCheckpoints |= Mask;
-        LobbyControl.Log.LogDebug($"client '{clientId}' completed checkpoint '{Name}' from '{Plugin.Name}'");
+        LobbyControl.Log.LogDebug($"client {ConnectionEvents.ConnectingName} completed checkpoint '{Name}' from '{Plugin.Name}'");
 
         ConnectionEvents.RaiseConnectionCheckpointServerEvent(clientId, this);
 
@@ -70,7 +70,7 @@ public partial class ConnectionCheckpoint : IDisposable
             return false;
         }
 
-        LobbyControl.Log.LogDebug($"'{Plugin.Name}' reset checkpoint '{Name}' for client '{clientId}'");
+        LobbyControl.Log.LogDebug($"'{Plugin.Name}' reset checkpoint '{Name}' for client {ConnectionEvents.ConnectingName}");
         ConnectionEvents.CurrentCheckpoints &= ~Mask;
 
         return true;

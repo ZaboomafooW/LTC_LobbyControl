@@ -35,16 +35,13 @@ internal class LobbyControl : BaseUnityPlugin
 
     internal static ManualLogSource Log;
 
-    internal static readonly Harmony Harmony = new Harmony(GUID);
+    internal static Harmony Harmony  { get; private set; }
+    internal static HashSet<Hook> Hooks { get; } = [];
 
     public static bool CanModifyLobby = true;
 
     public static bool CanSave = true;
     public static bool AutoSaveEnabled = true;
-
-    // ReSharper disable once CollectionNeverQueried.Global
-    public static readonly List<Hook> Hooks = [];
-
 
     private static readonly string[] IncompatibleGUIDs =
     [
@@ -63,6 +60,8 @@ internal class LobbyControl : BaseUnityPlugin
         Instance = this;
         try
         {
+            Harmony = new Harmony(GUID);
+
             PluginInfo[] incompatibleMods = Chainloader.PluginInfos.Values
                 .Where(p => IncompatibleGUIDs.Contains(p.Metadata.GUID)).ToArray();
             if (incompatibleMods.Length > 0)
@@ -95,6 +94,7 @@ internal class LobbyControl : BaseUnityPlugin
 
                 Harmony.PatchAll(typeof(PopUpPatch));
 
+                Harmony.PatchAll(typeof(FacepunchTransportPatches));
                 Harmony.PatchAll(typeof(JoinQueuePatches));
                 JoinQueuePatches.Init();
                 Harmony.PatchAll(typeof(LateJoinPatches));

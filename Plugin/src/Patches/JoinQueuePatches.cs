@@ -20,6 +20,7 @@ using Steamworks;
 using Steamworks.Data;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
+using Unity.Networking.Transport;
 using Object = UnityEngine.Object;
 
 namespace LobbyControl.Patches;
@@ -120,7 +121,9 @@ internal class JoinQueuePatches
         try
         {
             //Forcefully close the connection
-            NetworkManager.Singleton.NetworkConfig.NetworkTransport.DisconnectRemoteClient(clientId);
+            var nm = NetworkManager.Singleton;
+            var transportID = nm.ConnectionManager.ClientIdToTransportId(clientId);
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport.DisconnectRemoteClient(transportID);
         }
         catch (Exception ex)
         {
@@ -170,79 +173,129 @@ internal class JoinQueuePatches
         if (!response.Approved)
             return null;
 
-        var maxQueueSize = PluginConfig.JoinQueue.MaxSize.Value;
-        if (QueuedClients >= maxQueueSize)
+        try
         {
-            LobbyControl.Log.LogWarning($"Connection refused, Queue full! count:{QueuedClients}");
-            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+            LobbyControl.Log.LogDebug($"Connection request from {request.ClientNetworkId}. Current queue size: {QueuedClients}");
+
+            var maxQueueSize = PluginConfig.JoinQueue.MaxSize.Value;
+            if (QueuedClients >= maxQueueSize)
             {
-                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection refused",
-                    $"Client {request.ClientNetworkId} requested a connection but queue was full!"));
+                LobbyControl.Log.LogWarning($"Connection refused, Queue full! count:{QueuedClients}");
+                if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+                {
+                    HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection refused",
+                        $"Client {request.ClientNetworkId} requested a connection but queue was full!"));
+                }
+
+                var message = new StringBuilder();
+
+                if (maxQueueSize == 1)
+                {
+                    message.Append("Another player is connecting\n");
+                }
+                else
+                {
+                    message.Append("Join Queue is Full !\n");
+                    message.AppendFormat("Queued connections: {0}\n", QueuedClients);
+                }
+
+                message.Append("Please Wait a bit before retrying");
+
+                response.Approved = false;
+                response.Reason = message.ToString();
+                return null;
             }
 
-            var message = new StringBuilder();
+            var nm = NetworkManager.Singleton;
 
-            if (maxQueueSize == 1)
+            response.Pending = true;
+
+            switch (nm.NetworkConfig.NetworkTransport)
             {
-                message.Append("Another player is connecting\n");
-            }
-            else
-            {
-                message.Append("Join Queue is Full !\n");
-                message.AppendFormat("Queued connections: {0}\n", QueuedClients);
+                case FacepunchTransport:
+                {
+                    if (!FacepunchTransportPatches.TryGetConnection(request.ClientNetworkId, out var connectionPair) || !connectionPair.connectionInfo.identity.SteamId.IsValid)
+                    {
+                        LobbyControl.Log.LogWarning($"Connection refused, Failed to get SteamID for {request.ClientNetworkId}");
+
+                        response.Approved = false;
+                        response.Reason = "Failed to get SteamID";
+                        response.Pending = false;
+                        return null;
+                    }
+
+                    var steamID = connectionPair.connectionInfo.identity.SteamId;
+
+                    LobbyControl.Log.LogDebug($"Request was from SteamID {steamID}");
+
+                    if (StartOfRound.Instance.KickedClientIds.Contains(steamID.Value))
+                    {
+                        response.Approved = false;
+                        response.Reason = "You tried to bypass the kick!";
+                        response.Pending = false;
+                        return null;
+                    }
+
+                    Task.Run(() => SteamFriends.RequestUserInformation(steamID));
+
+                    // if this is the currently connecting client,
+                    // populate missing properties and resume the connection immediately
+                    if (ConnectingClient?.SteamId == steamID)
+                    {
+                        entry = ConnectingClient;
+                        entry.UnityConnection = (request, response);
+                        response.Pending = false;
+                    }
+                    else //prepare queue element
+                    {
+                        entry = new ConnectionQueueEntry(request, response, steamID);
+                    }
+
+                    if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+                    {
+                        HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                            $"Player {entry} requested a connection"));
+                    }
+
+                    break;
+                }
+                case UnityTransport unityTransport:
+                {
+                    var endpoint       = unityTransport!.GetEndpoint(request.ClientNetworkId);
+
+                    LobbyControl.Log.LogDebug($"Request was from IP {endpoint.Address}");
+
+                    entry = new ConnectionQueueEntry(request, response, endpoint);
+
+                    if (PluginConfig.JoinQueue.ConnectionPopup.Value)
+                    {
+                        HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
+                            $"Client {request.ClientNetworkId} requested a connection"));
+                    }
+                    break;
+                }
+                default:
+                {
+                    response.Approved = true;
+                    response.Pending = false;
+                    return null;
+                }
             }
 
-            message.Append("Please Wait a bit before retrying");
+            if(entry.UnityConnection!.Value.response.Pending)
+                ConnectionQueue.Enqueue(entry);
 
-            response.Approved = false;
-            response.Reason = message.ToString();
+            LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{QueuedClients}");
             return null;
         }
-
-        if (!__instance.disableSteam)
+        catch (Exception e)
         {
-            //grab the steamID directly from Facepunch
-            var steamTransport = NetworkManager.Singleton.NetworkConfig.NetworkTransport as FacepunchTransport;
-            var steamID = steamTransport!.connectedClients[request.ClientNetworkId].steamId;
-            Task.Run(() => SteamFriends.RequestUserInformation(steamID));
+            LobbyControl.Log.LogError($"Exception while processing connection request:\n{e}");
 
-            // if this is the currently connecting client,
-            // populate missing properties and resume the connection immediately
-            if (ConnectingClient?.SteamId == steamID)
-            {
-                entry = ConnectingClient;
-                entry.UnityConnection = (request, response);
-                response.Pending = false;
-            }
-            else //prepare queue element
-            {
-                entry = new ConnectionQueueEntry(request, response, steamID);
-            }
-
-            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
-            {
-                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
-                    $"Player {entry} requested a connection"));
-            }
+            response.Approved = true;
+            response.Pending = false;
+            return null;
         }
-        else
-        {
-            var unityTransport = NetworkManager.Singleton.NetworkConfig.NetworkTransport as UnityTransport;
-            var endpoint       = unityTransport!.GetEndpoint(request.ClientNetworkId);
-            entry = new ConnectionQueueEntry(request, response, NetAddress.From(endpoint.Address, endpoint.Port));
-
-            if (PluginConfig.JoinQueue.ConnectionPopup.Value)
-            {
-                HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection request",
-                    $"Client {request.ClientNetworkId} requested a connection"));
-            }
-        }
-
-        if(entry.UnityConnection!.Value.response.Pending)
-            ConnectionQueue.Enqueue(entry);
-
-        LobbyControl.Log.LogWarning($"Connection request Enqueued! count:{QueuedClients}");
-        return null;
     }
 
 
@@ -272,9 +325,9 @@ internal class JoinQueuePatches
         if (!PluginConfig.JoinQueue.Enabled.Value)
             return;
 
-        if (ConnectingClient?.ClientId != clientId)
+        if (ConnectingClient is not null && ConnectingClient.ClientId != clientId)
             LobbyControl.Log.LogError(
-                $"client {clientId} connected while {ConnectingClient} was still being processed!");
+                $"client {clientId} connected while '{ConnectingClient.Name}' was still being processed!");
         else
         {
             //reset timeout to be a bit more lenient
@@ -395,16 +448,16 @@ internal class JoinQueuePatches
             //check if the current connection reached all checkpoints!
             if (ConnectionEvents.HasCompletedAllCheckpoints && ConnectingClient is not null)
             {
-                var clientId = ConnectingClient.ClientId!.Value;
-
-                LobbyControl.Log.LogDebug($"{clientId} completed all the checkpoints");
+                var client = ConnectingClient;
                 ConnectingClient = null;
+
+                LobbyControl.Log.LogDebug($"{client.Name} completed all the checkpoints");
 
                 ConnectionTimer.Stop();
 
-                LobbyControl.Log.LogWarning($"{clientId} completed the connection");
+                LobbyControl.Log.LogWarning($"{client.Name} completed the connection");
 
-                ConnectionEvents.RaiseConnectionCompleteServerEvent(clientId);
+                ConnectionEvents.RaiseConnectionCompleteServerEvent(client.ClientId!.Value);
             }
 
             //if we are still waiting for a connection to complete
@@ -420,18 +473,17 @@ internal class JoinQueuePatches
                     var missing = ConnectionEvents.MissingCheckpoints;
 
                     LobbyControl.Log.LogWarning(
-                        $"missing checkpoints for {ConnectingClient}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
-
+                        $"missing checkpoints for {ConnectingClient.Name}: [{string.Join<ConnectionCheckpoint>(",", missing)}]");
 
                     if (PluginConfig.JoinQueue.TimeoutPopup.Value)
                         HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection Timeout",
-                                $"Player {ConnectingClient}\nCheckpoints before the timeout"));
+                                $"Player {ConnectingClient.Name}\n has been disconnected"));
 
                     HUDManager.Instance.StartCoroutine(HudUtils.ShowTipAfterDelay("Connection Timeout",
                         "If clients frequently fail to connect maybe consider increasing \"connection_timeout_ms\" in LobbyControl config",
                         5, "LCTip_LCTimeout"));
 
-                    LobbyControl.Log.LogError($"Connection to {ConnectingClient} expired, Disconnecting!");
+                    LobbyControl.Log.LogError($"Connection to {ConnectingClient.Name} expired, Disconnecting!");
 
                     ConnectingClient.DropConnection();
                 }
@@ -450,6 +502,13 @@ internal class JoinQueuePatches
                 if (!ConnectionQueue.TryDequeue(out var entry))
                     return;
 
+                if (entry.UnityConnection?.response.Approved is not true)
+                {
+                    LobbyControl.Log.LogWarning(
+                        $"Connection request Skipped! remaining: {ConnectionQueue.Count}");
+                    return;
+                }
+
                 LobbyControl.Log.LogWarning(
                     $"Connection request Resumed! remaining: {ConnectionQueue.Count}");
 
@@ -467,7 +526,7 @@ internal class JoinQueuePatches
 
                 if (entry.SteamId.IsValid)
                     HUDManager.Instance.StartCoroutine(HudUtils.ShowMessageAfterDelay("Connection resumed",
-                        $"Player {new Friend(entry.SteamId.Value).Name}({entry.ClientId}) is now connecting"));
+                        $"Player {entry.Name} is now connecting"));
 
                 return;
             }
@@ -637,10 +696,17 @@ internal class JoinQueuePatches
 
     public class ConnectionQueueEntry
     {
-        public SteamId SteamId => Identity.SteamId;
+        private ConnectionType _type;
+        public SteamId SteamId { get; }
         public ulong? ClientId => UnityConnection?.request.ClientNetworkId;
 
-        public string Name => SteamId.IsValid ? new Friend(SteamId.Value).Name : $"ClientId: {ClientId}";
+        public string Name =>
+            _type switch
+            {
+                ConnectionType.Steam => (SteamId.IsValid ? new Friend(SteamId.Value).Name : "????") + $"({ClientId})",
+                ConnectionType.IP => $"{EndPoint.Address}({ClientId})",
+                _ => throw new ArgumentOutOfRangeException()
+            };
 
         public ushort QueuePosition {
             get {
@@ -651,21 +717,30 @@ internal class JoinQueuePatches
             }
         }
 
-        public NetIdentity Identity { get; internal set; }
+        public NetworkEndPoint EndPoint { get; }
 
         public (NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)? UnityConnection { get; internal set; }
 
         public Connection? PreLobbyConnection { get; private set; }
 
-        internal ConnectionQueueEntry(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response, NetIdentity identity)
+        internal ConnectionQueueEntry(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response, SteamId identity)
         {
-            Identity        = identity;
+            _type           = ConnectionType.Steam;
+            SteamId         = identity;
             UnityConnection = (request, response);
         }
 
-        internal ConnectionQueueEntry(Connection preLobbyConnection, NetIdentity identity)
+        internal ConnectionQueueEntry(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response, NetworkEndPoint identity)
         {
-            Identity           = identity;
+            _type           = ConnectionType.IP;
+            EndPoint        = identity;
+            UnityConnection = (request, response);
+        }
+
+        internal ConnectionQueueEntry(Connection preLobbyConnection, SteamId identity)
+        {
+            _type              = ConnectionType.Steam;
+            SteamId            = identity;
             PreLobbyConnection = preLobbyConnection;
         }
 
@@ -691,6 +766,10 @@ internal class JoinQueuePatches
                 UnityConnection.Value.response.Reason   = reason;
                 UnityConnection.Value.response.Pending  = false;
             }
+            else
+            {
+                DropConnection();
+            }
         }
 
         internal void AcceptConnection()
@@ -704,7 +783,36 @@ internal class JoinQueuePatches
 
         public override string ToString()
         {
-            return $"{{Name: {(SteamId.IsValid ? new Friend(SteamId.Value).Name : "-")}, SteamId: {SteamId.Value}, ClientId: {ClientId}}}";
+            var builder = new StringBuilder("{Name: ");
+
+            switch (_type)
+            {
+                case ConnectionType.Steam:
+                    if (SteamId.IsValid)
+                    {
+                        builder.Append(new Friend(SteamId.Value).Name);
+                        builder.Append(", SteamID:").Append(SteamId.Value);
+                    }
+                    else
+                        builder.Append("-");
+                    break;
+                case ConnectionType.IP:
+                    builder.Append(", Endpoint: ").Append(EndPoint.Address);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            builder.Append(", ClientId: ").Append(ClientId);
+            builder.Append("}");
+
+            return builder.ToString();
         }
+    }
+
+    public enum ConnectionType
+    {
+        Steam,
+        IP,
     }
 }
