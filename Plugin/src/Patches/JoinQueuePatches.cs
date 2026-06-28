@@ -45,7 +45,6 @@ internal class JoinQueuePatches
             LobbyControl.Log.LogFatal("Could not find RPC id for SyncAlreadyHeldObjectsServerRpc");
         }
 
-
         methodInfo =
             AccessTools.Method(typeof(PlayerControllerB), nameof(PlayerControllerB.SendNewPlayerValuesServerRpc));
 

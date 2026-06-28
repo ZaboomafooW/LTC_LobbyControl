@@ -198,7 +198,19 @@ internal class LateJoinPatches
     {
         var controllerB = __instance.allPlayerScripts[assignedPlayerObjectId];
         controllerB.disconnectedMidGame = false;
-        //re-enable the player model ( typically needed for back-filling players )
+        //re-enable the player model (typically needed for back-filling players)
         controllerB.DisablePlayerModel(controllerB.gameObject, true, true);
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(NetworkObject), nameof(NetworkObject.GetCachedParent))]
+    public static void FixGetCachedParentNullRef(NetworkObject __instance)
+    {
+        //unity in their own code uses the null-coalescing operator, but that doesn't work unity lifetime checks
+        if (!__instance.m_CachedParent)
+        {
+            //force the value to actually be null to account for that
+            __instance.m_CachedParent = null;
+        }
     }
 }

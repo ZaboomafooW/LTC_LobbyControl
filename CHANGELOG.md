@@ -2,6 +2,7 @@
 - Add queue handling for Lobby command status.
 - Refactor connection queue to improve client management for late joins.
 - Enhance client approval handling by introducing queue position tracking.
+- Fix a late-join bug that caused null reference exceptions from netowrkObjects that lost their parent.
 
 ## v2.5.11
 - forcefully close client socket instead of using NGO API to request a disconnection
