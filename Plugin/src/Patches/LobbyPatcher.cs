@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using HarmonyLib;
+using LobbyControl.API;
 using Steamworks;
 using Steamworks.Data;
 
@@ -8,8 +9,28 @@ namespace LobbyControl.Patches;
 [HarmonyPatch]
 internal class LobbyPatcher
 {
+    private const string LobbyOwnerIdStringDataKey = LobbyControl.GUID + ".LobbyOwnerIdString";
     private static readonly Dictionary<Lobby, LobbyType> Visibility = [];
     private static readonly Dictionary<Lobby, bool> Open = [];
+
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(GameNetworkManager), "SteamMatchmaking_OnLobbyCreated")]
+    private static void SteamMatchmaking_OnLobbyCreated(Result result, Lobby lobby)
+    {
+        if (result != Result.OK)
+            return;
+
+        lobby.SetData(LobbyOwnerIdStringDataKey, lobby.Owner.Id.ToString());
+        ConnectionEvents.HostHasLobbyControl = true;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.JoinLobby))]
+    private static void JoinLobby(Lobby lobby)
+    {
+        ConnectionEvents.HostHasLobbyControl =
+            lobby.GetData(LobbyOwnerIdStringDataKey) == lobby.Owner.Id.ToString();
+    }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(Lobby), nameof(Lobby.SetJoinable))]

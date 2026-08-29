@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
+using LobbyControl.API;
 using LobbyControl.Utils;
 using LobbyControl.Utils.IL;
 using Unity.Netcode;
@@ -116,6 +117,9 @@ internal class LateJoinPatches
     [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.LeaveLobbyAtGameStart))]
     private static bool PreventSteamLobbyLeaving(GameNetworkManager __instance)
     {
+        if (!ConnectionEvents.HostHasLobbyControl)
+            return true;
+
         LobbyControl.Log.LogDebug("Preventing the closing of Steam lobby.");
         // Do not run the method that would usually close down the lobby.
         return false;
