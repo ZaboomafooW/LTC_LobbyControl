@@ -25,11 +25,12 @@ internal class LobbyPatcher
     }
 
     [HarmonyPrefix]
-    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.JoinLobby))]
-    private static void JoinLobby(Lobby lobby)
+    [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.StartClient))]
+    private static void StartClient(GameNetworkManager __instance, SteamId id)
     {
         ConnectionEvents.HostHasLobbyControl =
-            lobby.GetData(LobbyOwnerIdStringDataKey) == lobby.Owner.Id.ToString();
+            __instance.currentLobby.HasValue &&
+            __instance.currentLobby.Value.GetData(LobbyOwnerIdStringDataKey) == id.ToString();
     }
 
     [HarmonyPostfix]
