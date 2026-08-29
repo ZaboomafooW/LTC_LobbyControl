@@ -171,6 +171,9 @@ internal class LateJoinPatches
         if (!__runOriginal)
             return;
 
+        if (!ConnectionEvents.HostHasLobbyControl)
+            return;
+
         LobbyControl.Log.LogDebug("Lobby can be re-opened");
 
         LobbyControl.CanModifyLobby = true;
